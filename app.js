@@ -174,15 +174,14 @@
     renderDeviceChip();
   }
   function renderDeviceChip() {
-    $("deviceChipName").textContent = device.name || "기기 미설정";
+    $("deviceChipName").textContent = device.operator || "미설정";
     $("deviceChipScope").textContent = device.isMaster ? "취합용 · 전체 구역"
       : device.zones.length ? `담당 ${device.zones.join(", ")} 구역` : "담당 구역 미지정";
-    $("deviceChip").classList.toggle("unset", !device.name);
+    $("deviceChip").classList.toggle("unset", !device.operator);
   }
   function openSetup() {
     const form = $("setupForm");
-    form.deviceName.value = device.name;
-    form.operator.value = device.operator || $("operator").value;
+    form.operator.value = device.operator;
     form.isMaster.checked = device.isMaster;
     $("setupZones").innerHTML = zoneList().map((z) =>
       `<button type="button" class="chip ${device.zones.includes(z) ? "on" : ""}" data-zone="${esc(z)}">${esc(z)} 구역</button>`).join("");
@@ -445,7 +444,7 @@
       note: overrides.note ?? previous?.note ?? "",
       scanCount: (previous?.scanCount || 0) + 1,
       scannedValue: overrides.scannedValue ?? previous?.scannedValue ?? null,
-      deviceId: device.id, deviceName: device.name || "이름없는 기기",
+      deviceId: device.id, deviceName: device.name || device.operator || "미설정",
       updatedBy: currentOperator(), updatedAt: now(),
     };
     await dbPut("placements", item);
@@ -731,7 +730,7 @@
       if (String(p.updatedAt) > d.last) d.last = p.updatedAt;
       devices.set(key, d);
     });
-    $("deviceTotal").textContent = `${devices.size}개 기기 · 배치 ${state.placements.length.toLocaleString()}건`;
+    $("deviceTotal").textContent = `${devices.size}명 · 배치 ${state.placements.length.toLocaleString()}건`;
     $("deviceBody").innerHTML = [...devices.entries()].map(([id, d]) =>
       `<div class="data-card static">
         <div class="dc-top"><b>${esc(d.name)}</b>${id === device.id ? '<span class="badge match">이 기기</span>' : '<span class="badge">병합됨</span>'}</div>
@@ -1080,10 +1079,19 @@
   // 지하 보관소처럼 신호가 없는 곳에서도 작업이 멈추면 안 되므로,
   // 저장은 항상 기기에 먼저 하고 outbox 에 쌓아둔다. 신호가 잡히면 그때 올린다.
   // 업로드가 확인되기 전에는 큐에서 지우지 않는다.
-  let cloud = { url: "", token: "", enabled: false };
+  // 사용자가 폰마다 주소를 붙여넣지 않아도 되도록 기본값을 심어 둔다.
+  // 기기에서 [연결 설정]으로 바꾸면 그 값이 우선한다.
+  const DEFAULT_CLOUD = {
+    url: "https://script.google.com/macros/s/AKfycbxAYqG-pLJPZ67GUswqMOQ47DmwBnC3dXerGV7SaE_8Mo3SDCQxoy3AgeFEkloTLVRWxA/exec",
+    token: "kd-qc",
+    enabled: true,
+  };
+  let cloud = { ...DEFAULT_CLOUD };
 
   function loadCloud() {
-    cloud = JSON.parse(localStorage.getItem("qc-cloud") || "null") || { url: "", token: "", enabled: false };
+    const saved = JSON.parse(localStorage.getItem("qc-cloud") || "null");
+    // 예전에 빈 값으로 저장된 기기도 기본값을 되찾도록 보정한다.
+    cloud = saved && saved.url ? saved : { ...DEFAULT_CLOUD };
   }
   function saveCloud(next) {
     cloud = { ...cloud, ...next };
@@ -1193,7 +1201,9 @@
 
   function openCloudSetup() {
     const form = $("cloudForm");
-    form.url.value = cloud.url; form.token.value = cloud.token; form.enabled.checked = cloud.enabled;
+    form.url.value = cloud.url || DEFAULT_CLOUD.url;
+    form.token.value = cloud.token || DEFAULT_CLOUD.token;
+    form.enabled.checked = cloud.enabled;
     $("cloudTestResult").hidden = true;
     $("cloudModal").hidden = false;
   }
@@ -1226,10 +1236,13 @@
       e.preventDefault();
       const f = new FormData(e.target);
       const zones = [...$("setupZones").querySelectorAll(".chip.on")].map((b) => b.dataset.zone);
-      saveDevice({ name: String(f.get("deviceName")).trim(), operator: String(f.get("operator")).trim(), zones, isMaster: !!f.get("isMaster") });
+      // 폰 한 대를 한 사람이 쓰므로 기기명을 따로 받지 않고 작업자 이름을 그대로 쓴다.
+      // 기기 구분은 최초 실행 때 만들어진 device.id(UUID)가 계속 담당한다.
+      const operator = String(f.get("operator")).trim();
+      saveDevice({ name: operator, operator, zones, isMaster: !!f.get("isMaster") });
       $("setupModal").hidden = true;
       renderPicker();
-      toast(`기기 설정을 저장했습니다: ${device.name}`);
+      toast(`작업자를 ${device.operator} (으)로 설정했습니다.`);
     });
 
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -1428,7 +1441,7 @@
       await updateSyncChip();
       if (cloud.enabled) scheduleSync(3000);
       $("loading").hidden = true; $("app").hidden = false;
-      if (!device.name) openSetup();
+      if (!device.operator) openSetup();
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(() => {});
     } catch (error) {
       $("loading").innerHTML = `<b>기준 데이터를 불러오지 못했습니다.</b><p>${esc(error.message)}</p><p>START_OFFLINE.bat 파일로 실행했는지 확인하세요.</p>`;

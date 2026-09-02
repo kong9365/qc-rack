@@ -1,7 +1,7 @@
 // 이 앱은 항상 자기 자신의 로컬 서버(127.0.0.1) 뒤에서 동작하므로 캐시는 보조 수단이다.
 // 캐시 우선으로 두면 app/data 의 기준 데이터를 교체해도 옛 데이터가 계속 나오므로
 // 반드시 네트워크 우선 + 캐시 폴백으로 동작시킨다.
-const CACHE = "retention-rack-offline-v8";
+const CACHE = "retention-rack-offline-v9";
 // GitHub Pages 는 https://계정.github.io/저장소명/ 처럼 하위 경로로 서비스되므로
 // 절대경로("/index.html")를 쓰면 404 가 난다. 반드시 상대경로로 둔다.
 // 기준 데이터도 미리 받아 둔다. 첫 방문 때는 서비스워커가 아직 페이지를 제어하지 않아

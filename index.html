@@ -115,7 +115,7 @@
           <input id="listQuery" placeholder="품목 · 제조번호 · 랙 검색">
           <div class="filter-row">
             <select id="listStatus"><option value="all">전체 상태</option><option value="pending">미처리</option><option value="match">수량 일치</option><option value="short">수량 부족</option><option value="over">수량 초과</option></select>
-            <select id="listScope"><option value="all">전체 기기</option><option value="mine">이 기기</option></select>
+            <select id="listScope"><option value="all">전체 작업분</option><option value="mine">내 작업분</option></select>
           </div>
         </div>
         <div id="listBody" class="card-list"></div>
@@ -142,8 +142,8 @@
     <section id="settingsTab" class="tab-panel" hidden>
       <article class="panel setting-card">
         <div class="section-title"><div><small>DEVICE</small><h2>이 기기</h2></div></div>
-        <button class="device-chip" id="deviceChip"><small>기기명</small><b id="deviceChipName">기기 미설정</b><span id="deviceChipScope">담당 구역 없음</span></button>
-        <button class="ghost dark wide" id="setupBtn">기기 설정 변경</button>
+        <button class="device-chip" id="deviceChip"><small>작업자</small><b id="deviceChipName">미설정</b><span id="deviceChipScope">담당 구역 없음</span></button>
+        <button class="ghost dark wide" id="setupBtn">작업자 · 담당 구역 변경</button>
       </article>
 
       <article class="sync-card cloud-card" id="cloudCard">
@@ -169,7 +169,7 @@
       </details>
 
       <details class="panel more">
-        <summary>기기별 취합 현황</summary>
+        <summary>작업자별 취합 현황</summary>
         <p class="more-note" id="deviceTotal"></p>
         <div id="deviceBody" class="card-list"></div>
       </details>
@@ -191,11 +191,10 @@
 
   <!-- 기기 설정 -->
   <div id="setupModal" class="modal-backdrop" hidden><form id="setupForm" class="modal">
-    <div class="modal-head"><div><small>DEVICE SETUP</small><h2>이 기기 설정</h2></div><button type="button" data-close="setup">×</button></div>
-    <p class="modal-note">기기마다 이름을 다르게 지정하면, 나중에 취합할 때 누가 어떤 랙을 처리했는지 추적할 수 있습니다.</p>
+    <div class="modal-head"><div><small>SETUP</small><h2>작업자 설정</h2></div><button type="button" data-close="setup">×</button></div>
+    <p class="modal-note">작업자 이름은 저장되는 모든 기록에 남아, 나중에 누가 어떤 랙을 처리했는지 추적하는 데 쓰입니다.</p>
     <div class="form-grid">
-      <label class="span-2">기기명<input name="deviceName" placeholder="예: 폰-김주임" required></label>
-      <label class="span-2">작업자<input name="operator" placeholder="이름" required></label>
+      <label class="span-2">작업자 이름<input name="operator" placeholder="예: 김주임" required></label>
     </div>
     <fieldset><legend>담당 구역 (복수 선택 · 미선택 시 전체)</legend><div class="chip-grid" id="setupZones"></div></fieldset>
     <label class="switch role-switch"><input type="checkbox" name="isMaster"><span></span>취합용으로 사용 (전체 구역)</label>
