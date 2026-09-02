@@ -419,7 +419,9 @@
     const list = placementIndex().get(record.id) || [];
     showScanResult({ type: "saved", record, rackCode: saved.rackCode, pid: saved.id, here: num(saved.quantity), placed: sumOf(list) });
     feedback("ok");
-    if (!$("scanModal").hidden) scanLoop(); else focusScan();
+    if (!$("scanModal").hidden) {
+      if ($("keepCamera").checked) scanLoop(); else closeScanner();
+    } else focusScan();
   }
 
   function cancelQuantity() {
@@ -1087,6 +1089,21 @@
     scheduleSync(1500);
   }
 
+  // 저장 시점에 연동이 꺼져 있었으면 대기열에 안 들어간다.
+  // 나중에 켰을 때 그 기록들이 영영 누락되지 않도록, 전체를 다시 대기열에 넣는다.
+  async function requeueAll() {
+    if (!cloud.enabled || !cloud.url) return toast("먼저 [연결 설정]에서 구글 시트를 연결하세요.", "bad");
+    const total = state.placements.length + state.unlisted.length;
+    if (!total) return toast("올릴 작업 내용이 없습니다.");
+    if (!confirm(`이 기기의 작업 ${total.toLocaleString()}건을 모두 다시 올립니다.\n` +
+                 "이미 올라간 것은 시트에서 덮어써지며 중복 행이 생기지 않습니다. 진행할까요?")) return;
+    for (const p of state.placements) await enqueue(p, false);
+    for (const u of state.unlisted) await enqueue({ ...u, recordId: u.id, workStatus: "unlisted", scanCount: 1 }, false);
+    await updateSyncChip();
+    toast(`${total.toLocaleString()}건을 업로드 대기열에 넣었습니다.`);
+    syncNow(true);
+  }
+
   function scheduleSync(delay) {
     clearTimeout(state.syncTimer);
     state.syncTimer = setTimeout(() => syncNow(false), delay || 8000);
@@ -1287,12 +1304,15 @@
     $("cloudSetupBtn").addEventListener("click", openCloudSetup);
     $("cloudTestBtn").addEventListener("click", testCloud);
     $("syncNowBtn").addEventListener("click", () => syncNow(true));
+    $("requeueBtn").addEventListener("click", requeueAll);
     $("cloudForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       saveCloud({ url: String(f.get("url")).trim(), token: String(f.get("token")).trim(), enabled: !!f.get("enabled") });
       $("cloudModal").hidden = true;
-      toast(cloud.enabled ? "구글 시트 업로드를 켰습니다." : "구글 시트 업로드를 껐습니다.");
+      toast(cloud.enabled
+        ? "구글 시트 업로드를 켰습니다. 이전에 저장한 기록도 올리려면 [전체 다시 올리기]를 누르세요."
+        : "구글 시트 업로드를 껐습니다.");
       if (cloud.enabled) syncNow(false);
     });
     window.addEventListener("online", () => { updateSyncChip(); scheduleSync(1000); });
