@@ -1113,6 +1113,8 @@
         lotNumber: record?.lotNumber || item.lotNumber || "",
         rackCode: item.rackCode, zone: item.zone, rackBase: item.rackBase, level: item.level,
         quantity: item.quantity, unit: item.unit || record?.retentionUnit || "",
+        // LIMS 대조를 위해 마스터 기준수량을 함께 올린다. 시트에서 차이를 계산한다.
+        baseQuantity: record?.retentionQuantity ?? null,
         workStatus: item.workStatus, scanCount: item.scanCount || 1, note: item.note || "",
         updatedBy: item.updatedBy, deviceName: item.deviceName, deviceId: item.deviceId,
         updatedAt: item.updatedAt, deleted: !!deleted,
