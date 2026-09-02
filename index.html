@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#071b2b">
-  <title>보관검체 랙 배치 관리 · 오프라인</title>
+  <title>보관검체 랙 배치 관리</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="loading" class="loading"><div class="spinner"></div><p>오프라인 기준 데이터를 불러오는 중입니다.</p></div>
+  <div id="loading" class="loading"><div class="spinner"></div><p>기준 데이터를 불러오는 중입니다.</p></div>
 
   <div id="dataSetup" class="loading" hidden>
     <div class="data-setup">
@@ -33,37 +33,22 @@
   </div>
 
   <main id="app" hidden>
+    <!-- ============ 상단 (한 줄) ============ -->
     <header class="topbar">
-      <div class="brand"><div class="logo">QC</div><div><small>LOCAL · OFFLINE RETENTION SAMPLE</small><h1>보관검체 랙 배치 관리</h1></div></div>
-      <button class="device-chip" id="deviceChip"><small>이 기기</small><b id="deviceChipName">기기 미설정</b><span id="deviceChipScope">담당 구역 없음</span></button>
-      <div class="actions">
-        <button class="local-state" id="syncChip"><i></i><span id="syncLabel">기기 내부 저장</span></button>
-        <button class="ghost" id="setupBtn">기기 설정</button>
-        <button class="primary" id="syncTabBtn">통합 · 백업</button>
-      </div>
+      <div class="brand"><div class="logo">QC</div><h1>보관검체 랙배치</h1></div>
+      <button class="local-state" id="syncChip"><i></i><span id="syncLabel">기기 내부 저장</span></button>
     </header>
 
-    <section class="summary">
-      <div class="progress"><div class="ring" id="ring"><strong id="rate">0%</strong></div><div><small id="rateLabel">담당 구역 진행률</small><p><b id="processed">0</b> / <span id="total">0</span>건</p></div></div>
-      <div class="metric"><span>수량 일치</span><b id="complete">0</b></div>
-      <div class="metric warn"><span>수량 부족</span><b id="short">0</b></div>
-      <div class="metric danger"><span>수량 초과</span><b id="over">0</b></div>
-      <div class="metric alert-metric"><span>점검 필요</span><b id="conflictCount">0</b></div>
-      <div class="context"><label>작업자<input id="operator" placeholder="이름 입력"></label></div>
-    </section>
-
     <nav class="tabs">
-      <button class="active" data-tab="work">랙 스캔 작업</button>
-      <button data-tab="list">전체 검체 목록</button>
-      <button data-tab="racks">랙 배치 현황</button>
-      <button data-tab="issues">데이터 점검</button>
-      <button data-tab="sync">통합 · 백업</button>
+      <button class="active" data-tab="work">스캔</button>
+      <button data-tab="status">현황</button>
+      <button data-tab="settings">설정</button>
     </nav>
 
-    <!-- ============ 01 랙 스캔 작업 ============ -->
+    <!-- ============ 스캔 ============ -->
     <section id="workTab" class="tab-panel">
       <article class="panel rack-picker" id="rackPicker">
-        <div class="heading"><span>01</span><div><small>STEP 1 · 랙 선택</small><h2>작업할 랙 위치를 먼저 지정하세요</h2></div><button class="link" data-scan="rack">랙 QR 촬영</button></div>
+        <div class="heading"><span>01</span><div><small>STEP 1</small><h2>랙 위치를 고르세요</h2></div><button class="link" data-scan="rack">랙 QR</button></div>
         <div class="picker-row"><small>구역</small><div class="chip-grid" id="zoneGrid"></div></div>
         <div class="picker-row"><small>랙</small><div class="chip-grid" id="baseGrid"><p class="picker-hint">구역을 먼저 선택하세요</p></div></div>
         <div class="picker-row"><small>단</small><div class="chip-grid" id="levelGrid"><p class="picker-hint">랙을 먼저 선택하세요</p></div></div>
@@ -72,23 +57,27 @@
 
       <div id="rackWork" class="workspace" hidden>
         <article class="panel scan-panel">
-          <div class="rack-banner"><div><small>작업 중인 랙</small><h2 id="currentRack">—</h2><p id="currentRackMeta"></p></div><button class="ghost dark" id="changeRackBtn">랙 변경</button></div>
+          <div class="rack-banner">
+            <div><small>작업 중인 랙</small><h2 id="currentRack">—</h2></div>
+            <button class="ghost dark" id="changeRackBtn">변경</button>
+          </div>
+          <p class="rack-meta" id="currentRackMeta"></p>
 
-          <div class="heading tight"><span>02</span><div><small>STEP 2 · 실물 스캔</small><h2>제품 바코드를 스캔하세요</h2></div></div>
           <div class="scan-box">
-            <div class="scan-input-row"><input id="scanInput" placeholder="바코드 스캐너로 스캔하거나 의뢰번호를 입력 후 Enter" autocomplete="off"><button class="scan" data-scan="sample">▣ 카메라</button></div>
+            <button class="scan" data-scan="sample">▣ 카메라로 스캔</button>
+            <div class="scan-input-row"><input id="scanInput" placeholder="또는 의뢰번호 입력 후 Enter" autocomplete="off"></div>
             <div class="scan-toggles">
-              <label class="switch"><input type="checkbox" id="keepCamera" checked><span></span>카메라 켠 채 연속 스캔</label>
-              <label class="switch"><input type="checkbox" id="soundMode" checked><span></span>소리 알림</label>
-              <span class="scan-ready" id="scanReady">스캔 대기 중</span>
+              <label class="switch"><input type="checkbox" id="keepCamera" checked><span></span>연속 스캔</label>
+              <label class="switch"><input type="checkbox" id="soundMode" checked><span></span>소리</label>
+              <span class="scan-ready" id="scanReady">대기 중</span>
             </div>
           </div>
 
           <div id="scanResult" class="scan-result"></div>
 
           <details class="manual-search" id="manualSearch">
-            <summary>바코드가 없거나 인식되지 않을 때 · 수동 검색</summary>
-            <div class="search-fields"><label>품목명 · 품목코드 · 의뢰번호<input id="productQuery" placeholder="예: 레보셀정 또는 P24030060"></label><label>제조번호<input id="lotQuery" placeholder="예: 24002"></label></div>
+            <summary>바코드가 없거나 인식이 안 될 때</summary>
+            <div class="search-fields"><label>품목명 · 의뢰번호<input id="productQuery" placeholder="예: 레보셀정"></label><label>제조번호<input id="lotQuery" placeholder="예: 24002"></label></div>
             <div class="candidate-title"><span>검색 후보</span><b id="candidateCount">검색어를 입력하세요</b></div>
             <div id="candidates" class="candidates"></div>
             <button class="link" id="unlistedBtn">목록에 없는 실물 등록</button>
@@ -98,53 +87,104 @@
         <article class="panel rack-contents">
           <div class="section-title"><div><small>THIS RACK</small><h2>이 랙에 담긴 검체</h2></div><b id="rackCount">0건</b></div>
           <div id="rackItems" class="rack-items"></div>
-          <div class="rack-foot"><button class="ghost dark" id="undoBtn" disabled>방금 저장 취소</button><button class="ghost dark" id="closeRackBtn">이 랙 작업 마감</button></div>
+          <div class="rack-foot"><button class="ghost dark" id="undoBtn" disabled>방금 저장 취소</button><button class="ghost dark" id="closeRackBtn">이 랙 마감</button></div>
         </article>
       </div>
     </section>
 
-    <!-- ============ 전체 검체 목록 ============ -->
-    <section id="listTab" class="panel full tab-panel" hidden>
-      <div class="toolbar"><div><small>MASTER LIST</small><h2>전체 보관검체 목록</h2></div><div><input id="listQuery" placeholder="품목·제조번호·의뢰번호·랙 검색"><select id="listStatus"><option value="all">전체 상태</option><option value="pending">미처리</option><option value="match">수량 일치</option><option value="short">수량 부족</option><option value="over">수량 초과</option></select><select id="listScope"><option value="all">전체 기기 작업분</option><option value="mine">이 기기 작업분만</option></select></div></div>
-      <div class="table-wrap"><table><thead><tr><th>상태</th><th>품목명</th><th>제조번호</th><th>의뢰번호</th><th>기준</th><th>배치합계</th><th>차이</th><th>위치</th><th>보관기한</th></tr></thead><tbody id="listBody"></tbody></table></div>
-      <div class="pager"><span id="pageInfo"></span><div><button id="prevPage">이전</button><button id="nextPage">다음</button></div></div>
+    <!-- ============ 현황 ============ -->
+    <section id="statusTab" class="tab-panel" hidden>
+      <article class="panel status-summary">
+        <div class="progress"><div class="ring" id="ring"><strong id="rate">0%</strong></div><div><small id="rateLabel">배치된 검체</small><p><b id="processed">0</b> / <span id="total">0</span>건</p></div></div>
+        <div class="metric-grid">
+          <div class="metric"><span>수량 일치</span><b id="complete">0</b></div>
+          <div class="metric warn"><span>수량 부족</span><b id="short">0</b></div>
+          <div class="metric danger"><span>수량 초과</span><b id="over">0</b></div>
+          <div class="metric alert-metric"><span>점검 필요</span><b id="conflictCount">0</b></div>
+        </div>
+      </article>
+
+      <nav class="segment">
+        <button class="on" data-view="list">검체 목록</button>
+        <button data-view="racks">랙 현황</button>
+        <button data-view="issues">점검</button>
+      </nav>
+
+      <article id="listView" class="panel view">
+        <div class="filters">
+          <input id="listQuery" placeholder="품목 · 제조번호 · 랙 검색">
+          <div class="filter-row">
+            <select id="listStatus"><option value="all">전체 상태</option><option value="pending">미처리</option><option value="match">수량 일치</option><option value="short">수량 부족</option><option value="over">수량 초과</option></select>
+            <select id="listScope"><option value="all">전체 기기</option><option value="mine">이 기기</option></select>
+          </div>
+        </div>
+        <div id="listBody" class="card-list"></div>
+        <div class="pager"><span id="pageInfo"></span><div><button id="prevPage">이전</button><button id="nextPage">다음</button></div></div>
+      </article>
+
+      <article id="racksView" class="panel view" hidden>
+        <div class="section-title"><div><small>RACK</small><h2>랙 배치 현황</h2></div><b id="rackSummary"></b></div>
+        <div id="rackGrid" class="rack-grid"></div>
+      </article>
+
+      <article id="issuesView" class="panel view" hidden>
+        <div class="issue-cards">
+          <div><span>수량 부족</span><b id="issueShort">0</b></div>
+          <div><span>수량 초과</span><b id="issueOver">0</b></div>
+          <div><span>목록 외</span><b id="issueUnlisted">0</b></div>
+          <div class="danger"><span>병합 충돌</span><b id="issueConflict">0</b></div>
+        </div>
+        <div id="issueBody" class="card-list"></div>
+      </article>
     </section>
 
-    <!-- ============ 랙 배치 현황 ============ -->
-    <section id="racksTab" class="panel full tab-panel" hidden>
-      <div class="toolbar"><div><small>RACK OVERVIEW</small><h2>랙 배치 현황</h2></div><div><b id="rackSummary"></b><button id="rackExport" class="ghost dark">랙별 집계 CSV</button></div></div>
-      <div id="rackGrid" class="rack-grid"></div>
-    </section>
+    <!-- ============ 설정 ============ -->
+    <section id="settingsTab" class="tab-panel" hidden>
+      <article class="panel setting-card">
+        <div class="section-title"><div><small>DEVICE</small><h2>이 기기</h2></div></div>
+        <button class="device-chip" id="deviceChip"><small>기기명</small><b id="deviceChipName">기기 미설정</b><span id="deviceChipScope">담당 구역 없음</span></button>
+        <button class="ghost dark wide" id="setupBtn">기기 설정 변경</button>
+      </article>
 
-    <!-- ============ 데이터 점검 ============ -->
-    <section id="issuesTab" class="panel full tab-panel" hidden>
-      <div class="toolbar"><div><small>RECONCILIATION</small><h2>확인 및 불일치 목록</h2></div><button id="issuesExport" class="ghost dark">점검목록 CSV</button></div>
-      <div class="issue-cards"><div><span>수량 부족</span><b id="issueShort">0</b></div><div><span>수량 초과</span><b id="issueOver">0</b></div><div><span>목록 외 실물</span><b id="issueUnlisted">0</b></div><div class="danger"><span>병합 충돌</span><b id="issueConflict">0</b></div></div>
-      <div class="table-wrap"><table><thead><tr><th>구분</th><th>품목명</th><th>제조번호</th><th>의뢰번호</th><th>기준</th><th>합계</th><th>위치내역</th><th>확인자</th></tr></thead><tbody id="issueBody"></tbody></table></div>
-    </section>
-
-    <!-- ============ 통합 · 백업 ============ -->
-    <section id="syncTab" class="panel full tab-panel" hidden>
-      <div class="toolbar"><div><small>CONSOLIDATION</small><h2>여러 기기 작업 취합</h2></div></div>
-      <div class="sync-steps">
-        <article class="sync-card"><span>1</span><h3>각 기기에서 백업</h3><p>태블릿·노트북마다 작업이 끝나면 백업 파일을 만들어 USB로 모읍니다. 기기명과 담당 구역이 파일에 함께 기록됩니다.</p><button class="primary" id="backupBtn">작업 백업 파일 만들기</button></article>
-        <article class="sync-card"><span>2</span><h3>취합용 노트북에서 병합</h3><p>모은 백업 파일을 한 번에 선택하면 순서와 상관없이 병합됩니다. 같은 검체가 서로 다른 랙에 등록된 경우 덮어쓰지 않고 충돌로 보고합니다.</p><button class="primary" id="mergeBtn">백업 파일 병합 (다중 선택)</button><input id="mergeInput" type="file" accept="application/json" multiple hidden></article>
-        <article class="sync-card"><span>3</span><h3>최종 결과 추출</h3><p>병합이 끝나면 CSV를 내려받아 원본 엑셀과 대조합니다. 배치상세는 검체가 여러 랙에 나뉜 내역을 한 줄씩 펼쳐 보여줍니다.</p><button class="primary" id="exportBtn">전체 결과 CSV</button><button class="ghost dark" id="exportDetail">배치상세 CSV</button><button class="ghost dark" id="exportLims">LIMS 업로드 CSV</button><button class="ghost dark" id="exportIssues2">점검목록 CSV</button></article>
-      </div>
       <article class="sync-card cloud-card" id="cloudCard">
-          <div class="cloud-head"><div><small>GOOGLE SHEETS</small><h3>구글 시트 자동 업로드</h3></div><span class="cloud-state" id="cloudState">사용 안 함</span></div>
-          <p>지하 등 신호가 없는 곳에서는 기기에 쌓아두었다가, 인터넷이 잡히면 자동으로 올립니다. 업로드 전에는 기기에서 사라지지 않습니다.</p>
-          <div class="cloud-stats"><div><span>대기 중</span><b id="queueCount">0</b></div><div><span>업로드 완료</span><b id="sentCount">0</b></div><div><span>마지막 전송</span><b id="lastSync">—</b></div></div>
-          <div class="cloud-actions"><button class="ghost dark" id="cloudSetupBtn">연결 설정</button><button class="ghost dark" id="requeueBtn">전체 다시 올리기</button><button class="primary" id="syncNowBtn">지금 업로드</button></div>
-        </article>
+        <div class="cloud-head"><div><small>GOOGLE SHEETS</small><h3>구글 시트 업로드</h3></div><span class="cloud-state" id="cloudState">사용 안 함</span></div>
+        <p>신호가 없는 곳에서는 폰에 쌓아두었다가, 인터넷이 잡히면 자동으로 올립니다. 업로드 전에는 폰에서 사라지지 않습니다.</p>
+        <div class="cloud-stats"><div><span>대기 중</span><b id="queueCount">0</b></div><div><span>업로드 완료</span><b id="sentCount">0</b></div><div><span>마지막 전송</span><b id="lastSync">—</b></div></div>
+        <div class="cloud-actions">
+          <button class="primary" id="syncNowBtn">지금 업로드</button>
+          <button class="ghost dark" id="cloudSetupBtn">연결 설정</button>
+          <button class="ghost dark" id="requeueBtn">전체 다시 올리기</button>
+        </div>
+      </article>
 
-        <div class="device-table"><div class="section-title"><div><small>DEVICE STATUS</small><h2>기기별 취합 현황</h2></div><span id="deviceTotal"></span></div>
-        <div class="table-wrap"><table><thead><tr><th>기기명</th><th>담당 구역</th><th>처리 건수</th><th>사용 랙</th><th>마지막 작업</th><th>구분</th></tr></thead><tbody id="deviceBody"></tbody></table></div></div>
-      <div class="danger-zone"><div><b>이 기기 작업 데이터 초기화</b><p>병합이 끝난 후에만 사용하세요. 되돌릴 수 없습니다.</p></div><div class="danger-actions"><button class="ghost dark" id="replaceMasterBtn">기준 데이터 교체</button><button class="ghost dark" id="resetBtn">초기화</button></div></div>
+      <details class="panel more">
+        <summary>백업 · 내보내기</summary>
+        <p class="more-note">폰에 저장된 작업을 파일로 받습니다. 구글 시트를 쓰신다면 평소에는 필요 없습니다.</p>
+        <button class="ghost dark wide" id="backupBtn">작업 백업 파일 만들기</button>
+        <button class="ghost dark wide" id="exportBtn">전체 결과 CSV</button>
+        <button class="ghost dark wide" id="exportLims">LIMS 업로드 CSV</button>
+        <button class="ghost dark wide" id="exportDetail">배치상세 CSV</button>
+        <button class="ghost dark wide" id="issuesExport">점검목록 CSV</button>
+        <button class="ghost dark wide" id="rackExport">랙별 집계 CSV</button>
+      </details>
+
+      <details class="panel more">
+        <summary>기기별 취합 현황</summary>
+        <p class="more-note" id="deviceTotal"></p>
+        <div id="deviceBody" class="card-list"></div>
+      </details>
+
+      <details class="panel more danger-more">
+        <summary>고급 · 초기화</summary>
+        <p class="more-note">병합이 끝난 뒤에만 사용하세요. 되돌릴 수 없습니다.</p>
+        <button class="ghost dark wide" id="replaceMasterBtn">기준 데이터 교체</button>
+        <button class="ghost dark wide danger-btn" id="resetBtn">이 기기 작업 데이터 초기화</button>
+      </details>
+
+      <footer><span id="sourceInfo"></span></footer>
     </section>
 
     <datalist id="rackCodes"></datalist>
-    <footer><span id="sourceInfo"></span><span>PC·윈도우 태블릿 완전 오프라인용</span></footer>
   </main>
 
   <div id="toast" class="toast" hidden></div>
@@ -152,34 +192,34 @@
   <!-- 기기 설정 -->
   <div id="setupModal" class="modal-backdrop" hidden><form id="setupForm" class="modal">
     <div class="modal-head"><div><small>DEVICE SETUP</small><h2>이 기기 설정</h2></div><button type="button" data-close="setup">×</button></div>
-    <p class="modal-note">기기마다 이름과 담당 구역을 다르게 지정하면 나중에 취합할 때 어느 기기가 어떤 랙을 처리했는지 추적할 수 있습니다.</p>
+    <p class="modal-note">기기마다 이름을 다르게 지정하면, 나중에 취합할 때 누가 어떤 랙을 처리했는지 추적할 수 있습니다.</p>
     <div class="form-grid">
-      <label class="span-2">기기명<input name="deviceName" placeholder="예: 태블릿-A동, 노트북-취합용" required></label>
-      <label class="span-2">기본 작업자<input name="operator" placeholder="이름 입력"></label>
+      <label class="span-2">기기명<input name="deviceName" placeholder="예: 폰-김주임" required></label>
+      <label class="span-2">작업자<input name="operator" placeholder="이름" required></label>
     </div>
-    <fieldset><legend>담당 구역 (복수 선택 가능 · 미선택 시 전체)</legend><div class="chip-grid" id="setupZones"></div></fieldset>
-    <label class="switch role-switch"><input type="checkbox" name="isMaster"><span></span>이 기기를 <b>취합용</b>으로 사용 (모든 구역 조회 · 병합 담당)</label>
-    <button class="save">설정 저장</button>
+    <fieldset><legend>담당 구역 (복수 선택 · 미선택 시 전체)</legend><div class="chip-grid" id="setupZones"></div></fieldset>
+    <label class="switch role-switch"><input type="checkbox" name="isMaster"><span></span>취합용으로 사용 (전체 구역)</label>
+    <button class="save">저장</button>
   </form></div>
 
   <!-- 스캐너 -->
   <div id="scanModal" class="modal-backdrop" hidden><div class="modal scanner-modal">
-    <div class="modal-head"><div><small>OFFLINE CAMERA SCAN</small><h2 id="scanTitle">QR 촬영</h2></div><span class="scan-session">이번 세션 <b id="scanSession">0</b>건</span><button data-close="scan">×</button></div>
+    <div class="modal-head"><div><small>CAMERA</small><h2 id="scanTitle">촬영</h2></div><span class="scan-session">세션 <b id="scanSession">0</b>건</span><button data-close="scan">×</button></div>
     <div class="video-wrap"><video id="video" playsinline muted></video><canvas id="scanCanvas" hidden></canvas><i></i></div>
     <div class="scan-controls"><button type="button" class="ghost dark" id="switchCamBtn" hidden>⟳ 카메라 전환</button><span class="cam-label" id="camLabel"></span></div>
-    <p id="scanHint">QR을 화면 중앙에 맞추면 자동으로 인식합니다.</p>
+    <p id="scanHint">바코드를 가운데 띠에 맞추세요.</p>
     <div id="scanError" class="alert" hidden></div>
-    <div class="manual"><input id="manualScan" placeholder="의뢰번호 또는 코드 직접 입력"><button id="manualApply" class="primary">적용</button></div>
-    <button type="button" class="save" id="finishScanBtn">✓ 스캔 완료 · 카메라 끄기</button>
+    <div class="manual"><input id="manualScan" placeholder="코드 직접 입력"><button id="manualApply" class="primary">적용</button></div>
+    <button type="button" class="save" id="finishScanBtn">✓ 완료 · 카메라 끄기</button>
   </div></div>
 
-  <!-- 스캔 후 수량 확인 -->
+  <!-- 수량 확인 -->
   <div id="qtyModal" class="modal-backdrop" hidden><form id="qtyForm" class="modal qty-modal">
-    <div class="modal-head"><div><small>SCANNED · 수량 확인</small><h2 id="qtyName">—</h2></div><button type="button" data-close="qty">×</button></div>
+    <div class="modal-head"><div><small>수량 확인</small><h2 id="qtyName">—</h2></div><button type="button" data-close="qty">×</button></div>
     <p class="qty-meta" id="qtyMeta"></p>
     <div class="qty-facts">
-      <div><span>기준(마스터) 수량</span><b id="qtyMaster">—</b></div>
-      <div><span>이미 등록된 합계</span><b id="qtyPlaced">—</b></div>
+      <div><span>기준 수량</span><b id="qtyMaster">—</b></div>
+      <div><span>등록된 합계</span><b id="qtyPlaced">—</b></div>
       <div><span>이 랙 기존</span><b id="qtyHere">—</b></div>
       <div><span>남은 수량</span><b id="qtyRemain">—</b></div>
     </div>
@@ -195,36 +235,38 @@
 
   <!-- 목록 외 실물 -->
   <div id="unlistedModal" class="modal-backdrop" hidden><form id="unlistedForm" class="modal">
-    <div class="modal-head"><div><small>EXCEPTION ENTRY</small><h2>목록에 없는 실물 등록</h2></div><button type="button" data-close="unlisted">×</button></div>
-    <div class="form-grid"><label class="span-2">품목명<input name="productName" required></label><label>제조번호<input name="lotNumber" required></label><label>유효기한<input name="expiryDate" type="date"></label><label>실제 수량<input name="actualQuantity"></label><label>단위<input name="unit" value="EA"></label><label class="span-2">비고<textarea name="note"></textarea></label></div>
-    <p class="modal-note">현재 선택된 랙 <b id="unlistedRack">—</b> 에 저장됩니다.</p>
-    <button class="save">목록 외 실물 저장</button>
+    <div class="modal-head"><div><small>EXCEPTION</small><h2>목록에 없는 실물</h2></div><button type="button" data-close="unlisted">×</button></div>
+    <div class="form-grid"><label class="span-2">품목명<input name="productName" required></label><label>제조번호<input name="lotNumber" required></label><label>유효기한<input name="expiryDate" type="date"></label><label>수량<input name="actualQuantity" inputmode="decimal"></label><label>단위<input name="unit" value="EA"></label><label class="span-2">비고<textarea name="note"></textarea></label></div>
+    <p class="modal-note">현재 랙 <b id="unlistedRack">—</b> 에 저장됩니다.</p>
+    <button class="save">저장</button>
   </form></div>
 
-  <!-- 구글 시트 연결 설정 -->
+  <!-- 배치 수정 -->
+  <div id="detailModal" class="modal-backdrop" hidden><form id="detailForm" class="modal">
+    <div class="modal-head"><div><small>수정</small><h2>확인 결과 수정</h2></div><button type="button" data-close="detail">×</button></div>
+    <div class="selected"><div><small id="detailId"></small><h3 id="detailName"></h3><p id="detailMeta"></p></div><div class="lot"><small>제조번호</small><b id="detailLot"></b></div></div>
+    <div id="detailAlert" class="alert" hidden></div>
+    <div class="facts"><div><span>의뢰번호</span><b id="detailRequest"></b></div><div><span>기준 수량</span><b id="detailStandard"></b></div><div><span>유효기한</span><b id="detailExpiry"></b></div><div><span>보관기한</span><b id="detailUntil"></b></div></div>
+    <fieldset><legend>확인 결과</legend><div class="status-row"><label class="checked"><input type="radio" name="workStatus" value="complete" checked>입고 완료</label><label><input type="radio" name="workStatus" value="review">확인 필요</label><label><input type="radio" name="workStatus" value="missing">실물 미확인</label></div></fieldset>
+    <div class="entry-row"><label>이 랙 수량<input id="detailQuantity" inputmode="decimal"></label><label>랙코드<div class="rack-input"><input id="detailRack" list="rackCodes"><button type="button" data-scan="rackDetail">▣</button></div></label></div>
+    <label>비고<textarea id="detailNote"></textarea></label>
+    <div class="detail-actions"><button type="button" class="ghost dark" id="detailDelete">삭제</button><button class="save">저장</button></div>
+  </form></div>
+
+  <!-- 구글 시트 연결 -->
   <div id="cloudModal" class="modal-backdrop" hidden><form id="cloudForm" class="modal">
-    <div class="modal-head"><div><small>GOOGLE SHEETS</small><h2>구글 시트 연결 설정</h2></div><button type="button" data-close="cloud">×</button></div>
-    <p class="modal-note">구글 Apps Script 웹앱 주소와 토큰을 넣습니다. 설정 방법은 google-sheets\SETUP_KO.txt 를 참고하세요. 기기마다 한 번만 하면 됩니다.</p>
+    <div class="modal-head"><div><small>GOOGLE SHEETS</small><h2>구글 시트 연결</h2></div><button type="button" data-close="cloud">×</button></div>
+    <p class="modal-note">웹앱 주소와 토큰을 넣습니다. 기기마다 한 번만 하면 됩니다.</p>
     <div class="form-grid">
-      <label class="span-2">웹앱 URL<input name="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
-      <label class="span-2">토큰<input name="token" placeholder="Code.gs 의 TOKEN 과 동일하게"></label>
+      <label class="span-2">웹앱 URL<input name="url" placeholder="https://script.google.com/macros/s/.../exec" inputmode="url"></label>
+      <label class="span-2">토큰<input name="token" placeholder="예: kd-qc"></label>
     </div>
     <label class="switch role-switch"><input type="checkbox" name="enabled"><span></span>이 기기에서 구글 시트 업로드 사용</label>
     <div id="cloudTestResult" class="alert" hidden></div>
     <div class="detail-actions"><button type="button" class="ghost dark" id="cloudTestBtn">연결 시험</button><button class="save">저장</button></div>
   </form></div>
 
-  <!-- 항목 상세 수정 -->
-  <div id="detailModal" class="modal-backdrop" hidden><form id="detailForm" class="modal">
-    <div class="modal-head"><div><small>ADJUST ENTRY</small><h2>확인 결과 수정</h2></div><button type="button" data-close="detail">×</button></div>
-    <div class="selected"><div><small id="detailId"></small><h3 id="detailName"></h3><p id="detailMeta"></p></div><div class="lot"><small>제조번호</small><b id="detailLot"></b></div></div>
-    <div id="detailAlert" class="alert" hidden></div>
-    <div class="facts"><div><span>의뢰번호</span><b id="detailRequest"></b></div><div><span>기준 검체량</span><b id="detailStandard"></b></div><div><span>유효기한</span><b id="detailExpiry"></b></div><div><span>보관기한</span><b id="detailUntil"></b></div></div>
-    <fieldset><legend>확인 결과</legend><div class="status-row"><label class="checked"><input type="radio" name="workStatus" value="complete" checked>입고 완료</label><label><input type="radio" name="workStatus" value="review">확인 필요</label><label><input type="radio" name="workStatus" value="missing">실물 미확인</label></div></fieldset>
-    <div class="entry-row"><label>이 랙 수량<input id="detailQuantity" inputmode="decimal"></label><label>랙코드<div class="rack-input"><input id="detailRack" list="rackCodes"><button type="button" data-scan="rackDetail">▣</button></div></label></div>
-    <label>비고<textarea id="detailNote" placeholder="포장규격·확인사항 등을 입력"></textarea></label>
-    <div class="detail-actions"><button type="button" class="ghost dark" id="detailDelete">이 기록 삭제</button><button class="save">저장</button></div>
-  </form></div>
+  <input id="mergeInput" type="file" accept="application/json" multiple hidden>
 
   <script src="vendor/jsQR.js"></script>
   <script src="vendor/zxing.js"></script>

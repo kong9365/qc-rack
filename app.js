@@ -26,7 +26,7 @@
   let device = { id: null, name: "", operator: "", zones: [], isMaster: false };
 
   const recordMap = () => new Map(state.records.map((x) => [x.id, x]));
-  const currentOperator = () => $("operator").value.trim() || device.operator;
+  const currentOperator = () => (device.operator || "").trim();
   const placementId = (recordId, rackCode) => `${recordId}|${String(rackCode).toUpperCase()}`;
 
   /* 검체별 배치 집계 — 한 검체가 여러 랙에 나뉘어 보관될 수 있다. */
@@ -644,23 +644,30 @@
   }
   function renderList() {
     if (!state.records.length) return;
-    const rows = filteredList(), pages = Math.max(1, Math.ceil(rows.length / 30));
+    const rows = filteredList(), pages = Math.max(1, Math.ceil(rows.length / 20));
     if (state.page > pages) state.page = pages;
     const index = placementIndex();
-    $("listBody").innerHTML = rows.slice((state.page - 1) * 30, state.page * 30).map((r) => {
+    $("listBody").innerHTML = rows.slice((state.page - 1) * 20, state.page * 20).map((r) => {
       const list = index.get(r.id) || [];
       const status = recordStatus(r, list);
       const base = num(r.retentionQuantity), placed = sumOf(list);
       const diff = base === null || !list.length ? null : placed - base;
-      return `<tr data-id="${r.id}"><td><span class="badge ${status}">${recordStatusText[status]}</span></td><td><b>${esc(r.productName)}</b></td><td>${esc(r.lotNumber)}</td><td>${esc(r.requestNumber)}</td><td>${qty(base)} ${esc(r.retentionUnit || "")}</td><td>${list.length ? qty(placed) : "—"}</td><td class="${diff ? "diff" : ""}">${diff === null ? "—" : (diff > 0 ? `+${qty(diff)}` : qty(diff))}</td><td>${esc(list.map((p) => p.rackCode).join(", ") || "—")}</td><td>${date(r.retentionUntil)}</td></tr>`;
-    }).join("");
+      const where = list.map((p) => `${p.rackCode} ${qty(num(p.quantity))}`).join(" · ");
+      return `<button class="data-card" data-id="${r.id}">
+        <div class="dc-top"><b>${esc(r.productName)}</b><span class="badge ${status}">${recordStatusText[status]}</span></div>
+        <div class="dc-sub">제조 ${esc(r.lotNumber)} · ${esc(r.requestNumber)}</div>
+        <div class="dc-nums"><span>기준 <b>${qty(base)}${esc(r.retentionUnit || "")}</b></span><span>배치 <b>${list.length ? qty(placed) : "—"}</b></span>${diff ? `<span class="diff">차이 <b>${diff > 0 ? "+" : ""}${qty(diff)}</b></span>` : ""}</div>
+        ${where ? `<div class="dc-where">${esc(where)}</div>` : ""}
+      </button>`;
+    }).join("") || '<p class="picker-hint">해당하는 검체가 없습니다.</p>';
     $("pageInfo").textContent = `${rows.length.toLocaleString()}건 · ${state.page}/${pages}페이지`;
     $("prevPage").disabled = state.page <= 1; $("nextPage").disabled = state.page >= pages;
-    $("listBody").querySelectorAll("tr").forEach((tr) => tr.addEventListener("click", () => {
-      const list = placementIndex().get(tr.dataset.id) || [];
+    $("listBody").querySelectorAll(".data-card").forEach((card) => card.addEventListener("click", () => {
+      const list = placementIndex().get(card.dataset.id) || [];
       if (list.length) return openDetail(list[0].id);
-      const record = state.records.find((r) => r.id === tr.dataset.id);
-      if (!state.rack) return toast("먼저 랙 스캔 작업 탭에서 랙을 선택하세요.", "bad");
+      const record = state.records.find((r) => r.id === card.dataset.id);
+      if (!state.rack) return toast("먼저 [스캔] 탭에서 랙을 선택하세요.", "bad");
+      showTab("work");
       openQuantity(record, "");
     }));
   }
@@ -706,8 +713,13 @@
       detail: c.entries.map((e) => `${e.rackCode} ${qty(num(e.quantity))} (${e.deviceName})`).join(" ↔ "), by: c.entries.map((e) => e.updatedBy).join(" ↔ "), conflict: true }));
 
     $("issueBody").innerHTML = rows.map((x) =>
-      `<tr class="${x.conflict ? "conflict-row" : ""}"><td>${esc(x.kind)}</td><td><b>${esc(x.record?.productName)}</b></td><td>${esc(x.record?.lotNumber)}</td><td>${esc(x.record?.requestNumber)}</td><td>${qty(x.base)}</td><td>${qty(x.placed)}</td><td>${esc(x.detail)}</td><td>${esc(x.by)}</td></tr>`
-    ).join("") || '<tr><td colspan="8">점검대상이 없습니다.</td></tr>';
+      `<div class="data-card static ${x.conflict ? "conflict" : ""}">
+        <div class="dc-top"><b>${esc(x.record?.productName)}</b><span class="badge ${x.conflict ? "over" : "short"}">${esc(x.kind)}</span></div>
+        <div class="dc-sub">제조 ${esc(x.record?.lotNumber)} · ${esc(x.record?.requestNumber)}</div>
+        <div class="dc-nums"><span>기준 <b>${qty(x.base)}</b></span><span>합계 <b>${qty(x.placed)}</b></span></div>
+        <div class="dc-where">${esc(x.detail)}${x.by ? ` · ${esc(x.by)}` : ""}</div>
+      </div>`
+    ).join("") || '<p class="picker-hint">점검할 대상이 없습니다.</p>';
   }
 
   function renderDevices() {
@@ -721,15 +733,28 @@
     });
     $("deviceTotal").textContent = `${devices.size}개 기기 · 배치 ${state.placements.length.toLocaleString()}건`;
     $("deviceBody").innerHTML = [...devices.entries()].map(([id, d]) =>
-      `<tr><td><b>${esc(d.name)}</b></td><td>${esc([...d.zones].sort().join(", ") || "—")}</td><td>${d.count.toLocaleString()}건</td><td>${d.racks.size}개</td><td>${esc(String(d.last).replace("T", " ").slice(0, 16))}</td><td>${id === device.id ? '<span class="badge match">이 기기</span>' : '<span class="badge">병합됨</span>'}</td></tr>`
-    ).join("") || '<tr><td colspan="6">아직 작업 데이터가 없습니다.</td></tr>';
+      `<div class="data-card static">
+        <div class="dc-top"><b>${esc(d.name)}</b>${id === device.id ? '<span class="badge match">이 기기</span>' : '<span class="badge">병합됨</span>'}</div>
+        <div class="dc-nums"><span>처리 <b>${d.count.toLocaleString()}건</b></span><span>랙 <b>${d.racks.size}개</b></span><span>구역 <b>${esc([...d.zones].sort().join(",") || "—")}</b></span></div>
+        <div class="dc-where">${esc(String(d.last).replace("T", " ").slice(0, 16))}</div>
+      </div>`
+    ).join("") || '<p class="picker-hint">아직 작업 데이터가 없습니다.</p>';
   }
 
   function showTab(name) {
     document.querySelectorAll(".tab-panel").forEach((p) => { p.hidden = true; });
-    $(`${name}Tab`).hidden = false;
+    const panel = $(`${name}Tab`);
+    if (panel) panel.hidden = false;
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    window.scrollTo(0, 0);
     if (name === "work") focusScan();
+    if (name === "status") { renderList(); renderRacks(); renderIssues(); }
+  }
+
+  // 현황 탭 안의 세 화면(검체 목록 / 랙 현황 / 점검) 전환
+  function showView(name) {
+    ["list", "racks", "issues"].forEach((v) => { const el = $(`${v}View`); if (el) el.hidden = v !== name; });
+    document.querySelectorAll(".segment button").forEach((b) => b.classList.toggle("on", b.dataset.view === name));
   }
 
   /* ---------------- 카메라 ---------------- */
@@ -1011,7 +1036,7 @@
 
       await logAudit("merge", "-", summary);
       await refreshStored();
-      showTab("sync");
+      showTab("settings");
       const parts = [`${summary.files}개 파일`, `신규 ${summary.added}건`, `갱신 ${summary.updated}건`, `목록외 ${summary.extras}건`];
       if (summary.conflicts) parts.push(`⚠ 충돌 ${summary.conflicts}건`);
       if (summary.skipped) parts.push(`제외 ${summary.skipped}개`);
@@ -1190,23 +1215,25 @@
   }
 
   /* ---------------- 이벤트 바인딩 ---------------- */
+  // 폰 전용으로 화면을 정리하면서 일부 요소가 빠질 수 있으므로,
+  // 없는 요소에 붙이려 해도 앱 전체가 멈추지 않도록 감싼다.
+  const on = (id, event, handler) => { const el = $(id); if (el) el.addEventListener(event, handler); };
+
   function bind() {
-    $("operator").addEventListener("input", (e) => saveDevice({ operator: e.target.value }));
-    $("setupBtn").addEventListener("click", openSetup);
-    $("deviceChip").addEventListener("click", openSetup);
-    $("syncTabBtn").addEventListener("click", () => showTab("sync"));
-    $("setupForm").addEventListener("submit", (e) => {
+    on("setupBtn", "click", openSetup);
+    on("deviceChip", "click", openSetup);
+    on("setupForm", "submit", (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const zones = [...$("setupZones").querySelectorAll(".chip.on")].map((b) => b.dataset.zone);
       saveDevice({ name: String(f.get("deviceName")).trim(), operator: String(f.get("operator")).trim(), zones, isMaster: !!f.get("isMaster") });
-      $("operator").value = device.operator;
       $("setupModal").hidden = true;
       renderPicker();
       toast(`기기 설정을 저장했습니다: ${device.name}`);
     });
 
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+    document.querySelectorAll(".segment button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
     document.querySelectorAll("[data-scan]").forEach((b) => b.addEventListener("click", () => openScanner(b.dataset.scan)));
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => {
       if (b.dataset.close === "scan") return closeScanner();
@@ -1215,27 +1242,27 @@
       focusScan();
     }));
 
-    $("rackDirectApply").addEventListener("click", () => setRack($("rackDirect").value.trim()));
-    $("rackDirect").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); setRack(e.target.value.trim()); } });
-    $("changeRackBtn").addEventListener("click", clearRack);
-    $("closeRackBtn").addEventListener("click", toggleClosure);
-    $("undoBtn").addEventListener("click", undoLast);
+    on("rackDirectApply", "click", () => setRack($("rackDirect").value.trim()));
+    on("rackDirect", "keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); setRack(e.target.value.trim()); } });
+    on("changeRackBtn", "click", clearRack);
+    on("closeRackBtn", "click", toggleClosure);
+    on("undoBtn", "click", undoLast);
 
-    $("scanInput").addEventListener("keydown", (e) => {
+    on("scanInput", "keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
       const value = e.target.value;
       e.target.value = "";
       handleScan(value);
     });
-    $("switchCamBtn").addEventListener("click", switchCamera);
-    $("finishScanBtn").addEventListener("click", closeScanner);
-    $("manualApply").addEventListener("click", () => handleScan($("manualScan").value));
-    $("manualScan").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleScan(e.target.value); } });
+    on("switchCamBtn", "click", switchCamera);
+    on("finishScanBtn", "click", closeScanner);
+    on("manualApply", "click", () => handleScan($("manualScan").value));
+    on("manualScan", "keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleScan(e.target.value); } });
 
     // 수량 팝업
-    $("qtyForm").addEventListener("submit", submitQuantity);
-    $("qtyValue").addEventListener("input", updateQtyPreview);
+    on("qtyForm", "submit", submitQuantity);
+    on("qtyValue", "input", updateQtyPreview);
     $("qtyForm").querySelectorAll("[data-qty]").forEach((b) => b.addEventListener("click", () => {
       const next = (num($("qtyValue").value) || 0) + Number(b.dataset.qty);
       $("qtyValue").value = Math.max(0, next);
@@ -1262,34 +1289,34 @@
       } else if (e.key.length === 1) state.wedge.buffer += e.key;
     });
 
-    $("productQuery").addEventListener("input", renderCandidates);
-    $("lotQuery").addEventListener("input", renderCandidates);
-    $("unlistedBtn").addEventListener("click", (e) => { e.preventDefault(); openUnlisted(); });
-    $("unlistedForm").addEventListener("submit", saveUnlisted);
+    on("productQuery", "input", renderCandidates);
+    on("lotQuery", "input", renderCandidates);
+    on("unlistedBtn", "click", (e) => { e.preventDefault(); openUnlisted(); });
+    on("unlistedForm", "submit", saveUnlisted);
 
-    $("detailForm").addEventListener("submit", submitDetail);
-    $("detailDelete").addEventListener("click", deleteDetail);
+    on("detailForm", "submit", submitDetail);
+    on("detailDelete", "click", deleteDetail);
     $("detailForm").querySelectorAll('input[name="workStatus"]').forEach((radio) =>
       radio.addEventListener("change", () => $("detailForm").querySelectorAll(".status-row label")
         .forEach((l) => l.classList.toggle("checked", l.querySelector("input").checked))));
 
-    $("listQuery").addEventListener("input", () => { state.page = 1; renderList(); });
-    $("listStatus").addEventListener("change", () => { state.page = 1; renderList(); });
-    $("listScope").addEventListener("change", () => { state.page = 1; renderList(); });
-    $("prevPage").addEventListener("click", () => { if (state.page > 1) { state.page--; renderList(); } });
-    $("nextPage").addEventListener("click", () => { state.page++; renderList(); });
+    on("listQuery", "input", () => { state.page = 1; renderList(); });
+    on("listStatus", "change", () => { state.page = 1; renderList(); });
+    on("listScope", "change", () => { state.page = 1; renderList(); });
+    on("prevPage", "click", () => { if (state.page > 1) { state.page--; renderList(); } });
+    on("nextPage", "click", () => { state.page++; renderList(); });
 
-    $("exportBtn").addEventListener("click", () => exportCsv("all"));
-    $("issuesExport").addEventListener("click", () => exportCsv("issues"));
-    $("exportIssues2").addEventListener("click", () => exportCsv("issues"));
-    $("exportDetail").addEventListener("click", exportPlacements);
-    $("exportLims").addEventListener("click", exportLimsCsv);
-    $("rackExport").addEventListener("click", exportRackCsv);
-    $("backupBtn").addEventListener("click", backup);
-    $("mergeBtn").addEventListener("click", () => $("mergeInput").click());
-    $("mergeInput").addEventListener("change", merge);
-    $("resetBtn").addEventListener("click", resetLocal);
-    $("replaceMasterBtn").addEventListener("click", () => {
+    on("exportBtn", "click", () => exportCsv("all"));
+    on("issuesExport", "click", () => exportCsv("issues"));
+    on("exportIssues2", "click", () => exportCsv("issues"));
+    on("exportDetail", "click", exportPlacements);
+    on("exportLims", "click", exportLimsCsv);
+    on("rackExport", "click", exportRackCsv);
+    on("backupBtn", "click", backup);
+    on("mergeBtn", "click", () => $("mergeInput").click());
+    on("mergeInput", "change", merge);
+    on("resetBtn", "click", resetLocal);
+    on("replaceMasterBtn", "click", () => {
       const picker = document.createElement("input");
       picker.type = "file"; picker.accept = ".json,application/json"; picker.multiple = true;
       picker.onchange = (e) => {
@@ -1300,12 +1327,12 @@
       picker.click();
     });
 
-    $("syncChip").addEventListener("click", () => showTab("sync"));
-    $("cloudSetupBtn").addEventListener("click", openCloudSetup);
-    $("cloudTestBtn").addEventListener("click", testCloud);
-    $("syncNowBtn").addEventListener("click", () => syncNow(true));
-    $("requeueBtn").addEventListener("click", requeueAll);
-    $("cloudForm").addEventListener("submit", (e) => {
+    on("syncChip", "click", () => showTab("settings"));
+    on("cloudSetupBtn", "click", openCloudSetup);
+    on("cloudTestBtn", "click", testCloud);
+    on("syncNowBtn", "click", () => syncNow(true));
+    on("requeueBtn", "click", requeueAll);
+    on("cloudForm", "submit", (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       saveCloud({ url: String(f.get("url")).trim(), token: String(f.get("token")).trim(), enabled: !!f.get("enabled") });
@@ -1384,7 +1411,6 @@
       applyMaster(master);
 
       loadDevice();
-      $("operator").value = device.operator || "";
       $("rackCodes").innerHTML = [...new Set(state.racks.map((r) => r.fullCode))].sort()
         .map((code) => `<option value="${esc(code)}"></option>`).join("");
       $("sourceInfo").textContent = `${state.meta.sourceFile} · ${state.rackMeta.sourceFile}`;
@@ -1394,6 +1420,7 @@
       renderDeviceChip();
       await refreshStored();
       renderPicker();
+      showView("list");
 
       const savedRack = localStorage.getItem("qc-rack");
       if (savedRack && findRack(savedRack)) setRack(savedRack);

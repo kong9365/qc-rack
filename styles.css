@@ -212,3 +212,136 @@ td.diff{font-weight:800;color:#a03636}
 .data-setup .fallback summary{color:var(--muted);font-size:11px;cursor:pointer;text-align:center}
 .data-setup .fallback ol{margin-top:12px}
 .pick-btn.small{min-height:42px;line-height:42px;font-size:12px}
+
+/* ════════════════════════════════════════════════════
+   폰 전용 레이아웃 (이 블록이 위의 PC용 규칙을 덮어씀)
+   목표: 스크롤 없이 바로 스캔. 상단 점유 618px -> 120px 내외
+   ════════════════════════════════════════════════════ */
+body{font-size:15px}
+
+/* 상단 한 줄 */
+.topbar{position:sticky;top:0;z-index:30;min-height:52px;padding:8px 12px;gap:10px}
+.topbar .brand{gap:8px;min-width:0}
+.topbar .logo{width:30px;height:30px;border-radius:8px;font-size:12px}
+.topbar h1{margin:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.local-state{flex:0 0 auto;padding:7px 10px;font-size:10px;max-width:47%;overflow:hidden}
+.local-state span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 탭 3개 — 스크롤 없이 꽉 차게 */
+.tabs{position:sticky;top:52px;z-index:29;height:46px;padding:0;gap:0;background:#fff;border-bottom:1px solid #cbd8e0}
+.tabs button{flex:1;height:46px;padding:0;font-size:14px;border-bottom-width:3px}
+
+/* 본문 여백 축소 */
+.tab-panel{padding:12px}
+.panel{border-radius:12px}
+.rack-picker,.full{margin:0 0 12px;padding:14px}
+.workspace{padding:0;display:block}
+.scan-panel,.rack-contents{min-height:0;padding:14px;margin-bottom:12px}
+
+/* 작업 중인 랙 배너 — 압축 */
+.rack-banner{padding:12px 14px;margin-bottom:8px}
+.rack-banner h2{margin:2px 0 0;font-size:26px}
+.rack-meta{margin:0 0 12px;padding:0 2px;color:#5f7784;font-size:11px;line-height:1.6}
+.rack-meta b{color:var(--navy2)}
+
+/* 스캔 영역 — 카메라 버튼을 가장 크게 */
+.scan-box{padding:12px;margin-bottom:0}
+.scan-box .scan{min-height:58px;font-size:17px;margin-bottom:9px}
+.scan-input-row{display:block}
+.scan-input-row input{height:46px;font-size:14px}
+.scan-toggles{gap:12px;margin-top:9px}
+.scan-ready{margin-left:auto;font-size:10px}
+
+.result-card{margin-top:12px}
+.result-actions button{flex:1;min-height:44px}
+
+/* 랙 선택 칩 */
+.picker-row{grid-template-columns:1fr;gap:7px;padding:11px 0}
+.picker-row>small{padding-top:0}
+.chip{min-height:46px;padding:0 15px}
+.chip.big{flex:1 0 27%;min-height:56px;font-size:19px}
+.chip.level{flex:1 0 30%;min-height:58px}
+.rack-direct{max-width:none}
+
+/* 이 랙에 담긴 검체 */
+.rack-items{max-height:none}
+.rack-item{min-height:56px}
+
+/* 현황 탭 요약 */
+.status-summary{display:flex;flex-direction:column;gap:12px;padding:14px;margin-bottom:12px}
+.status-summary .progress{min-width:0;padding:0;border:0;gap:12px}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.metric-grid .metric{min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.metric-grid .metric b{font-size:21px}
+
+/* 세그먼트 (현황 탭 안 화면 전환) */
+.segment{display:flex;gap:6px;margin-bottom:12px;padding:4px;border-radius:11px;background:#e3ebef}
+.segment button{flex:1;min-height:40px;border-radius:8px;color:#5f7784;background:transparent;font-size:13px}
+.segment button.on{color:var(--navy);background:#fff;box-shadow:0 1px 4px rgba(22,52,72,.12)}
+.view{padding:14px;margin-bottom:12px}
+
+/* 표 대신 카드 목록 */
+.filters{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.filter-row{display:flex;gap:8px}
+.filter-row select{flex:1;width:auto}
+.card-list{display:flex;flex-direction:column;gap:8px}
+.data-card{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left;display:block}
+.data-card:not(.static):active{background:#f0fbf9;border-color:var(--teal2)}
+.data-card.conflict{background:#faf5ff;border-color:#d9c8ec}
+.dc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.dc-top b{font-size:14px;line-height:1.35}
+.dc-top .badge{flex:0 0 auto}
+.dc-sub{margin-top:4px;color:#7b8d98;font-size:11px}
+.dc-nums{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:#5f7784}
+.dc-nums b{color:var(--navy2);font-size:13px}
+.dc-nums .diff b{color:#a03636}
+.dc-where{margin-top:6px;padding-top:6px;border-top:1px dashed #e2eaee;color:#08776d;font-size:11px;line-height:1.5}
+.pager{margin-top:14px}
+.pager button{min-height:38px;padding:0 14px}
+
+.rack-grid{grid-template-columns:1fr 1fr;gap:8px}
+.rack-card{padding:12px}
+.rack-card h3{font-size:15px}
+.rack-card b{margin-top:-26px;font-size:18px}
+.rack-card p{height:auto;min-height:28px}
+.issue-cards{grid-template-columns:1fr 1fr;margin-bottom:12px}
+.issue-cards div{padding:11px}
+.issue-cards b{font-size:19px}
+
+/* 설정 탭 */
+.setting-card{padding:14px;margin-bottom:12px}
+.setting-card .device-chip{width:100%;margin:10px 0;border-color:var(--line);color:var(--navy);background:#f4f8fa}
+.setting-card .device-chip small{color:#7b8d98}
+.setting-card .device-chip span{color:#5f7784}
+button.wide{width:100%;min-height:46px;margin-top:8px}
+.cloud-card{padding:14px;margin-bottom:12px}
+.cloud-stats{grid-template-columns:1fr 1fr 1fr;gap:6px}
+.cloud-stats div{padding:9px}
+.cloud-stats b{font-size:15px}
+.cloud-stats span{font-size:8px}
+.cloud-actions{flex-direction:column;gap:8px}
+.more{padding:14px;margin-bottom:12px}
+.more summary{font-size:14px;font-weight:800;color:var(--navy2);cursor:pointer;min-height:26px}
+.more-note{margin:12px 0 0;color:#6b8290;font-size:11px;line-height:1.6}
+.more.danger-more{border-color:#eccaca;background:#fdf8f8}
+.more.danger-more summary{color:#8c3636}
+.danger-btn{border-color:#d9a6a6!important;color:#9a3f3f!important}
+#settingsTab footer{margin:0;padding:14px 4px 24px;border:0;color:#8697a1;font-size:9px}
+
+/* 모달 — 폰에서 아래에서 올라오게 */
+.modal-backdrop{padding:0;align-items:flex-end}
+.modal{width:100%;max-height:92vh;overflow-y:auto;border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+.modal-head h2{font-size:16px}
+.scanner-modal{max-height:96vh}
+.video-wrap video{min-height:240px;max-height:46vh}
+.qty-input input{height:62px;font-size:27px}
+.qty-input button{flex:0 0 62px;height:62px}
+.detail-actions button{min-height:48px}
+.toast{left:12px;right:12px;bottom:16px;max-width:none;text-align:center}
+
+/* 태블릿용 세로배치 미디어쿼리가 폰에서도 걸려 헤더/배너가 2줄이 되던 것 교정 */
+.topbar{flex-direction:row;align-items:center;flex-wrap:nowrap}
+.rack-banner{flex-direction:row;align-items:center}
+.rack-banner>div:first-child{min-width:0}
+.rack-banner .ghost{flex:0 0 auto;min-height:40px;padding:0 14px}
+.summary .context{display:none}
