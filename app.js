@@ -218,9 +218,22 @@
     }));
   }
 
+  // 랙 마스터에 빠진 위치가 있어도 현장 작업이 막히면 안 되므로,
+  // 코드 형식(구역-면번호-단)이 맞으면 경고만 하고 받아준다.
+  const RACK_PATTERN = /^([A-Z])-([LR])(\d+)-(\d+)$/;
+  function resolveRack(code) {
+    const found = findRack(code);
+    if (found) return found;
+    const m = String(code).trim().toUpperCase().match(RACK_PATTERN);
+    if (!m) return null;
+    return { zone: m[1], side: m[2], rackNumber: m[3], level: m[4],
+      fullCode: `${m[1]}-${m[2]}${m[3]}-${m[4]}`, rackBaseCode: `${m[1]}-${m[2]}${m[3]}`, unlisted: true };
+  }
+
   function setRack(code) {
-    const rack = findRack(code);
-    if (!rack) return toast(`랙코드 ${code} 를 마스터에서 찾지 못했습니다.`, "bad");
+    const rack = resolveRack(code);
+    if (!rack) return toast(`랙코드 형식이 올바르지 않습니다: ${code} (예: A-L1-3)`, "bad");
+    if (rack.unlisted) toast(`${rack.fullCode} 는 랙 마스터에 없는 코드입니다. 확인 후 사용하세요.`, "bad");
     state.rack = rack;
     localStorage.setItem("qc-rack", rack.fullCode);
     $("rackPicker").hidden = true; $("rackWork").hidden = false;
@@ -277,7 +290,7 @@
     if (state.scanMode === "rack") {
       const rack = state.racks.find((r) => normalize(value).includes(normalize(r.fullCode)));
       closeScanner();
-      return rack ? setRack(rack.fullCode) : toast(`랙코드를 인식하지 못했습니다: ${value}`, "bad");
+      return setRack(rack ? rack.fullCode : String(value).trim().toUpperCase());
     }
     if (state.scanMode === "rackDetail") {
       const rack = state.racks.find((r) => normalize(value).includes(normalize(r.fullCode)));
@@ -1371,8 +1384,13 @@
         fetch("data/retention-samples.json").then((r) => { if (!r.ok) throw new Error("404"); return r.json(); }),
         fetch("data/rack-master.json").then((r) => { if (!r.ok) throw new Error("404"); return r.json(); }),
       ]);
-      if (retention?.records?.length && rack?.racks?.length) return { retention, rack };
-    } catch { /* 번들에 없으면 기기 저장본을 쓴다 */ }
+      if (retention?.records?.length && rack?.racks?.length) {
+        // 받은 즉시 기기에 저장한다. 서비스워커 캐시가 비워지거나(특히 iOS)
+        // 아직 캐시가 만들어지기 전이어도, 오프라인에서 이 사본으로 계속 작업할 수 있다.
+        dbPut("master", { id: "current", retention, rack, savedAt: now() }).catch(() => {});
+        return { retention, rack };
+      }
+    } catch { /* 네트워크가 없으면 기기 저장본을 쓴다 */ }
     const saved = await dbGet("master", "current");
     return saved?.retention?.records?.length ? { retention: saved.retention, rack: saved.rack } : null;
   }
