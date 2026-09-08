@@ -345,3 +345,10 @@ button.wide{width:100%;min-height:46px;margin-top:8px}
 .rack-banner>div:first-child{min-width:0}
 .rack-banner .ghost{flex:0 0 auto;min-height:40px;padding:0 14px}
 .summary .context{display:none}
+
+/* 구역 칩: 코드 + 라벨(원료/완제품) 2줄 */
+.chip.zone-chip{flex:1 0 30%;min-height:56px;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0 10px}
+.chip.zone-chip b{font-size:15px;font-weight:900}
+.chip.zone-chip small{font-size:9px;font-weight:700;opacity:.75}
+.chip.zone-chip.on small{opacity:.9}
+.picker-row .lv-note{font-size:9px;font-weight:700;color:#9aabb4}

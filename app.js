@@ -184,7 +184,7 @@
     form.operator.value = device.operator;
     form.isMaster.checked = device.isMaster;
     $("setupZones").innerHTML = zoneList().map((z) =>
-      `<button type="button" class="chip ${device.zones.includes(z) ? "on" : ""}" data-zone="${esc(z)}">${esc(z)} 구역</button>`).join("");
+      `<button type="button" class="chip ${device.zones.includes(z) ? "on" : ""}" data-zone="${esc(z)}">${esc(state.racks.find((r) => r.zone === z)?.zoneLabel || z)}</button>`).join("");
     $("setupZones").querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => b.classList.toggle("on")));
     $("setupModal").hidden = false;
   }
@@ -197,13 +197,15 @@
 
   function renderPicker() {
     const zones = device.isMaster || !device.zones.length ? zoneList() : zoneList().filter((z) => device.zones.includes(z));
-    $("zoneGrid").innerHTML = zones.map((z) =>
-      `<button class="chip big ${state.pickZone === z ? "on" : ""}" data-pick="zone" data-value="${esc(z)}">${esc(z)}</button>`).join("");
+    $("zoneGrid").innerHTML = zones.map((z) => {
+      const label = state.racks.find((r) => r.zone === z)?.zoneLabel || z;
+      return `<button class="chip big zone-chip ${state.pickZone === z ? "on" : ""}" data-pick="zone" data-value="${esc(z)}"><b>${esc(z)}</b><small>${esc(label)}</small></button>`;
+    }).join("");
     $("baseGrid").innerHTML = state.pickZone
-      ? baseList(state.pickZone).map((b) => `<button class="chip ${state.pickBase === b ? "on" : ""}" data-pick="base" data-value="${esc(b)}">${esc(b)}</button>`).join("")
+      ? baseList(state.pickZone).map((b) => `<button class="chip ${state.pickBase === b ? "on" : ""}" data-pick="base" data-value="${esc(b)}">${esc(b.split("-").pop())}</button>`).join("")
       : '<p class="picker-hint">구역을 먼저 선택하세요</p>';
     $("levelGrid").innerHTML = state.pickBase
-      ? levelList(state.pickBase).map((l) => {
+      ? levelList(state.pickBase).slice().reverse().map((l) => {
           const code = `${state.pickBase}-${l}`;
           const here = state.placements.filter((p) => p.rackCode === code);
           return `<button class="chip level" data-pick="level" data-value="${esc(l)}"><b>${esc(l)}단</b><small>${here.length ? `${here.length}건 · ${qty(sumOf(here))}` : "비어 있음"}</small></button>`;
@@ -220,14 +222,17 @@
 
   // 랙 마스터에 빠진 위치가 있어도 현장 작업이 막히면 안 되므로,
   // 코드 형식(구역-면번호-단)이 맞으면 경고만 하고 받아준다.
-  const RACK_PATTERN = /^([A-Z])-([LR])(\d+)-(\d+)$/;
+  const RACK_PATTERN = /^([RF])-([A-Z])-([LR])(\d+)-(\d+)$/;
   function resolveRack(code) {
     const found = findRack(code);
     if (found) return found;
     const m = String(code).trim().toUpperCase().match(RACK_PATTERN);
     if (!m) return null;
-    return { zone: m[1], side: m[2], rackNumber: m[3], level: m[4],
-      fullCode: `${m[1]}-${m[2]}${m[3]}-${m[4]}`, rackBaseCode: `${m[1]}-${m[2]}${m[3]}`, unlisted: true };
+    const [, kind, area, side, number, level] = m;
+    return { kind, area, zone: `${kind}-${area}`, zoneLabel: `${kind === "R" ? "원료" : "완제품"} ${area}`,
+      side, rackNumber: number, level,
+      fullCode: `${kind}-${area}-${side}${number}-${level}`,
+      rackBaseCode: `${kind}-${area}-${side}${number}`, unlisted: true };
   }
 
   function setRack(code) {
@@ -252,7 +257,7 @@
     const mine = state.placements.filter((p) => p.deviceId === device.id).length;
     const here = state.placements.filter((p) => p.rackCode === state.rack.fullCode);
     const closed = state.closures.find((c) => c.rackCode === state.rack.fullCode);
-    $("currentRackMeta").innerHTML = `${esc(state.rack.zone)} 구역 · ${esc(state.rack.rackBaseCode)} · ${esc(state.rack.level)}단 &nbsp;|&nbsp; 이 랙 <b>${here.length}</b>건 / 수량 <b>${qty(sumOf(here))}</b> · 이 기기 누적 <b>${mine}</b>건${closed ? ' <span class="pill">마감됨</span>' : ""}`;
+    $("currentRackMeta").innerHTML = `${esc(state.rack.zoneLabel || state.rack.zone)} · ${esc(state.rack.rackBaseCode.split("-").pop())} · ${esc(state.rack.level)}단 &nbsp;|&nbsp; 이 랙 <b>${here.length}</b>건 / 수량 <b>${qty(sumOf(here))}</b> · 이 기기 누적 <b>${mine}</b>건${closed ? ' <span class="pill">마감됨</span>' : ""}`;
     $("closeRackBtn").textContent = closed ? "마감 해제" : "이 랙 작업 마감";
   }
 
