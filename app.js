@@ -13,6 +13,8 @@
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : null; };
   const qty = (v) => (v === null || v === undefined ? "—" : `${Math.round(v * 1000) / 1000}`);
+  // 포장단위가 없는 검체(마스터에 매핑이 없는 소수 품목)에서는 구분자만 남지 않도록 조건부로 붙인다.
+  const packLabel = (record) => (record?.packagingUnit ? ` · ${esc(record.packagingUnit)}` : "");
 
   const state = {
     records: [], racks: [], meta: null, rackMeta: null,
@@ -334,12 +336,12 @@
         `<div class="result-list">${result.hits.slice(0, 12).map((r) => {
           const list = index.get(r.id) || [];
           const status = recordStatus(r, list);
-          return `<button class="result-pick" data-act="pick" data-id="${r.id}"><span><b>${esc(r.productName)}</b><small>${esc(r.requestNumber)} · 제조 ${esc(r.lotNumber)}</small></span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))}/${qty(num(r.retentionQuantity))}` : "미처리"}</span></button>`;
+          return `<button class="result-pick" data-act="pick" data-id="${r.id}"><span><b>${esc(r.productName)}</b><small>${esc(r.requestNumber)} · 제조 ${esc(r.lotNumber)}${packLabel(r)}</small></span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))}/${qty(num(r.retentionQuantity))}` : "미처리"}</span></button>`;
         }).join("")}</div>`, "");
     } else if (result.type === "saved") {
       $("scanReady").textContent = "저장 완료 · 다음 검체를 스캔하세요";
       box.innerHTML = card("ok", `✔ ${esc(result.rackCode)} 저장 완료`,
-        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <b>${qty(result.here)}</b> · 전체 <b>${qty(result.placed)}</b> / 기준 ${qty(num(result.record.retentionQuantity))} ${esc(result.record.retentionUnit || "")}</p></div>`,
+        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <b>${qty(result.here)}</b> · 전체 <b>${qty(result.placed)}</b> / 기준 ${qty(num(result.record.retentionQuantity))} ${esc(result.record.retentionUnit || "")}${packLabel(result.record)}</p></div>`,
         `<button class="ghost dark" data-act="undo">방금 저장 취소</button><button class="ghost dark" data-act="detail" data-id="${esc(result.pid)}">수정</button>`);
     } else {
       box.innerHTML = card("bad", "일치하는 검체를 찾지 못했습니다",
@@ -374,7 +376,7 @@
 
     $("qtyForm").dataset.id = record.id;
     $("qtyName").textContent = record.productName || record.id;
-    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}`;
+    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}${record.packagingUnit ? ` · ${record.packagingUnit}` : ""}`;
     $("qtyMaster").textContent = `${qty(base)} ${unit}`;
     $("qtyPlaced").textContent = `${qty(placed)} ${unit}`;
     $("qtyHere").textContent = `${qty(num(here?.quantity) || 0)} ${unit}`;
@@ -477,7 +479,16 @@
   async function undoLast() {
     if (!state.undo) return;
     const { id, previous } = state.undo;
-    if (previous) await dbPut("placements", previous); else await dbDelete("placements", id);
+    if (previous) {
+      // 시트에는 방금 저장한 값이 이미 올라갔을 수 있으므로, 이전 값을 새 시각으로 다시 올려 되돌린다.
+      const restored = { ...previous, updatedAt: now() };
+      await dbPut("placements", restored);
+      await enqueue(restored, false);
+    } else {
+      const removed = state.placements.find((p) => p.id === id);
+      await dbDelete("placements", id);
+      if (removed) await enqueue(removed, true);
+    }
     await logAudit("placement_undo", id, { restored: !!previous });
     state.undo = null; $("undoBtn").disabled = true;
     await refreshStored(); resetScanResult();
@@ -494,7 +505,7 @@
     $("detailForm").dataset.id = pid;
     $("detailId").textContent = placement.recordId;
     $("detailName").textContent = record?.productName || placement.recordId;
-    $("detailMeta").textContent = `${record?.itemCode || ""} · 의뢰번호 ${record?.requestNumber || ""}`;
+    $("detailMeta").textContent = `${record?.itemCode || ""} · 의뢰번호 ${record?.requestNumber || ""}${record?.packagingUnit ? ` · ${record.packagingUnit}` : ""}`;
     $("detailLot").textContent = record?.lotNumber || "";
     $("detailRequest").textContent = record?.requestNumber || "—";
     $("detailStandard").textContent = `${qty(num(record?.retentionQuantity))} ${record?.retentionUnit || ""}`;
@@ -529,7 +540,10 @@
     const quantity = num($("detailQuantity").value);
     if (quantity === null) return toast("수량을 입력하세요.", "bad");
     // 랙을 옮긴 경우 이전 위치 기록은 지워야 수량이 두 번 잡히지 않는다.
-    if (rackCode !== placement.rackCode) await dbDelete("placements", pid);
+    if (rackCode !== placement.rackCode) {
+      await dbDelete("placements", pid);
+      await enqueue(placement, true);   // 시트에서도 이전 위치 행을 지운다
+    }
     await savePlacement(record, {
       rackCode, quantity,
       workStatus: $("detailForm").querySelector('input[name="workStatus"]:checked').value,
@@ -617,7 +631,7 @@
         const record = rmap.get(p.recordId);
         const list = index.get(p.recordId) || [];
         const elsewhere = list.length > 1 ? `<em>다른 랙 ${list.length - 1}곳 · 합계 ${qty(sumOf(list))}/${qty(num(record?.retentionQuantity))}</em>` : "";
-        return `<button class="rack-item" data-id="${esc(p.id)}"><span><b>${esc(record?.productName || p.recordId)}</b><small>제조 ${esc(record?.lotNumber)} · ${esc(record?.requestNumber)}</small>${elsewhere}</span><span class="qty-badge">${qty(num(p.quantity))}<small>${esc(p.unit || "")}</small></span></button>`;
+        return `<button class="rack-item" data-id="${esc(p.id)}"><span><b>${esc(record?.productName || p.recordId)}</b><small>제조 ${esc(record?.lotNumber)} · ${esc(record?.requestNumber)}${packLabel(record)}</small>${elsewhere}</span><span class="qty-badge">${qty(num(p.quantity))}<small>${esc(p.unit || "")}</small></span></button>`;
       }),
       ...extras.map((u) => `<div class="rack-item extra"><span><b>${esc(u.productName)}</b><small>제조 ${esc(u.lotNumber)} · 목록 외</small></span><span class="qty-badge">${qty(num(u.quantity))}<small>${esc(u.unit || "")}</small></span></div>`),
     ].join("") || '<p class="picker-hint">아직 이 랙에 담긴 검체가 없습니다. 제품 바코드를 스캔하세요.</p>';
@@ -637,7 +651,7 @@
     $("candidates").innerHTML = rows.map((r) => {
       const list = index.get(r.id) || [];
       const status = recordStatus(r, list);
-      return `<button class="candidate" data-id="${r.id}"><div class="candidate-main"><div><strong>${esc(r.productName)}</strong><small>${esc(r.itemCode)} · ${esc(r.requestNumber)}</small></div><div><span>제조번호</span><strong>${esc(r.lotNumber)}</strong></div></div><div class="candidate-meta"><span>기준 ${qty(num(r.retentionQuantity))}${esc(r.retentionUnit)}</span><span>보관기한 ${date(r.retentionUntil)}</span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))} · ${list.length}곳` : "미처리"}</span></div></button>`;
+      return `<button class="candidate" data-id="${r.id}"><div class="candidate-main"><div><strong>${esc(r.productName)}</strong><small>${esc(r.itemCode)} · ${esc(r.requestNumber)}${packLabel(r)}</small></div><div><span>제조번호</span><strong>${esc(r.lotNumber)}</strong></div></div><div class="candidate-meta"><span>기준 ${qty(num(r.retentionQuantity))}${esc(r.retentionUnit)}</span><span>보관기한 ${date(r.retentionUntil)}</span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))} · ${list.length}곳` : "미처리"}</span></div></button>`;
     }).join("");
     $("candidates").querySelectorAll(".candidate").forEach((b) =>
       b.addEventListener("click", () => {
@@ -672,7 +686,7 @@
       const where = list.map((p) => `${p.rackCode} ${qty(num(p.quantity))}`).join(" · ");
       return `<button class="data-card" data-id="${r.id}">
         <div class="dc-top"><b>${esc(r.productName)}</b><span class="badge ${status}">${recordStatusText[status]}</span></div>
-        <div class="dc-sub">제조 ${esc(r.lotNumber)} · ${esc(r.requestNumber)}</div>
+        <div class="dc-sub">제조 ${esc(r.lotNumber)} · ${esc(r.requestNumber)}${packLabel(r)}</div>
         <div class="dc-nums"><span>기준 <b>${qty(base)}${esc(r.retentionUnit || "")}</b></span><span>배치 <b>${list.length ? qty(placed) : "—"}</b></span>${diff ? `<span class="diff">차이 <b>${diff > 0 ? "+" : ""}${qty(diff)}</b></span>` : ""}</div>
         ${where ? `<div class="dc-where">${esc(where)}</div>` : ""}
       </button>`;
@@ -732,7 +746,7 @@
     $("issueBody").innerHTML = rows.map((x) =>
       `<div class="data-card static ${x.conflict ? "conflict" : ""}">
         <div class="dc-top"><b>${esc(x.record?.productName)}</b><span class="badge ${x.conflict ? "over" : "short"}">${esc(x.kind)}</span></div>
-        <div class="dc-sub">제조 ${esc(x.record?.lotNumber)} · ${esc(x.record?.requestNumber)}</div>
+        <div class="dc-sub">제조 ${esc(x.record?.lotNumber)} · ${esc(x.record?.requestNumber)}${packLabel(x.record)}</div>
         <div class="dc-nums"><span>기준 <b>${qty(x.base)}</b></span><span>합계 <b>${qty(x.placed)}</b></span></div>
         <div class="dc-where">${esc(x.detail)}${x.by ? ` · ${esc(x.by)}` : ""}</div>
       </div>`
@@ -913,7 +927,7 @@
   }
 
   /* ---------------- 내보내기 · 백업 · 병합 ---------------- */
-  const SUMMARY_HEADERS = ["검체ID", "의뢰번호", "품목코드", "품목명", "제조번호", "유효기한", "보관기한", "기준수량", "단위", "배치합계", "차이", "위치수", "위치내역", "상태", "최종확인자", "최종기기", "최종확인일시"];
+  const SUMMARY_HEADERS = ["검체ID", "의뢰번호", "품목코드", "품목명", "제조번호", "포장단위", "유효기한", "보관기한", "기준수량", "단위", "배치합계", "차이", "위치수", "위치내역", "상태", "최종확인자", "최종기기", "최종확인일시"];
   function summaryRows(onlyIssues) {
     const index = placementIndex();
     return state.records.map((record) => {
@@ -922,7 +936,7 @@
       if (onlyIssues && (status === "match")) return null;
       const base = num(record.retentionQuantity), placed = sumOf(list);
       const latest = list.slice().sort(byNewest)[0];
-      return [record.id, record.requestNumber, record.itemCode, record.productName, record.lotNumber,
+      return [record.id, record.requestNumber, record.itemCode, record.productName, record.lotNumber, record.packagingUnit || "",
         record.expiryDate, record.retentionUntil, qty(base), record.retentionUnit || "",
         list.length ? qty(placed) : "", base === null || !list.length ? "" : qty(placed - base),
         list.length, list.map((p) => `${p.rackCode}:${qty(num(p.quantity))}`).join("; "),
@@ -930,7 +944,7 @@
     }).filter(Boolean);
   }
   function exportCsv(mode) {
-    const extras = state.unlisted.map((u) => [u.id, "", "", u.productName, u.lotNumber, u.expiryDate, "", "", u.unit || "",
+    const extras = state.unlisted.map((u) => [u.id, "", "", u.productName, u.lotNumber, "", u.expiryDate, "", "", u.unit || "",
       qty(num(u.quantity)), "", 1, `${u.rackCode}:${qty(num(u.quantity))}`, "목록 외 실물", u.updatedBy, u.deviceName, u.updatedAt]);
     csvFile(`보관검체_${mode === "all" ? "전체결과" : "점검목록"}_${now().slice(0, 10)}.csv`,
       [SUMMARY_HEADERS, ...summaryRows(mode !== "all"), ...extras]);
@@ -941,14 +955,14 @@
     const rmap = recordMap();
     const rows = state.placements.slice().sort((a, b) => a.id.localeCompare(b.id)).map((p) => {
       const record = rmap.get(p.recordId);
-      return [p.id, p.recordId, record?.requestNumber || "", record?.productName || "", record?.lotNumber || "",
+      return [p.id, p.recordId, record?.requestNumber || "", record?.productName || "", record?.lotNumber || "", record?.packagingUnit || "",
         p.rackCode, p.zone, p.rackBase, p.level, qty(num(p.quantity)), p.unit || "",
         statusText[p.workStatus] || p.workStatus, p.scanCount || "", p.note || "", p.updatedBy, p.deviceName, p.updatedAt];
     });
-    const extras = state.unlisted.map((u) => [u.id, u.id, "", u.productName, u.lotNumber, u.rackCode, u.zone, u.rackBase, u.level,
+    const extras = state.unlisted.map((u) => [u.id, u.id, "", u.productName, u.lotNumber, "", u.rackCode, u.zone, u.rackBase, u.level,
       qty(num(u.quantity)), u.unit || "", "목록 외 실물", "", u.note || "", u.updatedBy, u.deviceName, u.updatedAt]);
     csvFile(`보관검체_배치상세_${now().slice(0, 10)}.csv`,
-      [["배치ID", "검체ID", "의뢰번호", "품목명", "제조번호", "랙코드", "구역", "랙", "단", "수량", "단위", "확인결과", "스캔횟수", "비고", "확인자", "기기명", "확인일시"], ...rows, ...extras]);
+      [["배치ID", "검체ID", "의뢰번호", "품목명", "제조번호", "포장단위", "랙코드", "구역", "랙", "단", "수량", "단위", "확인결과", "스캔횟수", "비고", "확인자", "기기명", "확인일시"], ...rows, ...extras]);
     toast("배치상세 CSV를 저장했습니다.");
   }
 
@@ -1121,21 +1135,26 @@
   async function enqueue(item, deleted) {
     if (!cloud.enabled) return;
     const record = state.records.find((r) => r.id === item.recordId);
+    // 업로드 중에 같은 항목이 다시 저장되면 이 행이 새 내용으로 덮이는데, rev 가 달라져서
+    // 업로드가 끝난 뒤 새 내용을 실수로 지우지 않는다(syncNow 참고).
     await dbPut("outbox", {
       id: item.id,
       queuedAt: now(),
+      rev: uuid(),
       payload: {
         id: item.id, recordId: item.recordId,
         requestNumber: record?.requestNumber || "", itemCode: record?.itemCode || "",
         productName: record?.productName || item.productName || "",
         lotNumber: record?.lotNumber || item.lotNumber || "",
+        packagingUnit: record?.packagingUnit || "",
         rackCode: item.rackCode, zone: item.zone, rackBase: item.rackBase, level: item.level,
         quantity: item.quantity, unit: item.unit || record?.retentionUnit || "",
         // LIMS 대조를 위해 마스터 기준수량을 함께 올린다. 시트에서 차이를 계산한다.
         baseQuantity: record?.retentionQuantity ?? null,
         workStatus: item.workStatus, scanCount: item.scanCount || 1, note: item.note || "",
         updatedBy: item.updatedBy, deviceName: item.deviceName, deviceId: item.deviceId,
-        updatedAt: item.updatedAt, deleted: !!deleted,
+        // 삭제는 항상 "지금" 시각으로 보낸다. 직전 저장보다 오래된 시각이면 시트가 삭제를 무시한다.
+        updatedAt: deleted ? now() : item.updatedAt, deleted: !!deleted,
       },
     });
     await updateSyncChip();
@@ -1202,20 +1221,31 @@
         }),
       });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error === "token_mismatch" ? "토큰이 일치하지 않습니다." : data.error);
-      for (const row of batch) await dbDelete("outbox", row.id);
+      if (!data.ok) {
+        const reason = { token_mismatch: "토큰이 일치하지 않습니다.",
+          busy: "다른 기기가 올리는 중입니다. 잠시 뒤 다시 시도합니다.",
+          schema_mismatch: "시트의 열 구성이 앱과 다릅니다. 관리자가 시트 스크립트를 새 버전으로 갱신해야 합니다." }[data.error];
+        const err = new Error(reason || data.error);
+        err.retryMs = data.error === "busy" ? 10000 : 60000;
+        throw err;
+      }
+      for (const row of batch) {
+        // 업로드하는 사이에 같은 항목이 다시 저장됐다면(rev 가 바뀜) 새 내용이므로 남겨 둔다.
+        const current = await dbGet("outbox", row.id);
+        if (!current || current.rev === row.rev) await dbDelete("outbox", row.id);
+      }
       localStorage.setItem("qc-sent", String(sentCount() + batch.length));
       localStorage.setItem("qc-sync-at", new Date().toISOString().replace("T", " ").slice(0, 16));
       state.syncing = false;
       await updateSyncChip();
-      if (manual || batch.length > 5) toast(`구글 시트 업로드 완료 · ${batch.length}건 (신규 ${data.saved} / 갱신 ${data.updated})`);
+      if (manual || batch.length > 5) toast(`구글 시트 업로드 완료 · ${batch.length}건 (신규 ${data.saved} / 갱신 ${data.updated}${data.deleted ? ` / 삭제 ${data.deleted}` : ""})`);
       if (queue.length > batch.length) scheduleSync(1200);
     } catch (error) {
       state.syncing = false;
       await updateSyncChip();
       // 실패해도 큐는 그대로 둔다. 다음 기회에 다시 시도한다.
       if (manual) toast(`업로드 실패: ${error.message} — 기기에는 그대로 보관되어 있습니다.`, "bad");
-      scheduleSync(60000);
+      scheduleSync(error.retryMs || 60000);
     }
   }
 
