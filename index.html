@@ -217,7 +217,7 @@
     <div class="modal-head"><div><small>수량 확인</small><h2 id="qtyName">—</h2></div><button type="button" data-close="qty">×</button></div>
     <p class="qty-meta" id="qtyMeta"></p>
     <div class="qty-facts">
-      <div><span>기준 수량</span><b id="qtyMaster">—</b></div>
+      <div><span>보관량(LIMS)</span><b id="qtyMaster">—</b></div>
       <div><span>등록된 합계</span><b id="qtyPlaced">—</b></div>
       <div><span>이 랙 기존</span><b id="qtyHere">—</b></div>
       <div><span>남은 수량</span><b id="qtyRemain">—</b></div>
@@ -245,7 +245,7 @@
     <div class="modal-head"><div><small>수정</small><h2>확인 결과 수정</h2></div><button type="button" data-close="detail">×</button></div>
     <div class="selected"><div><small id="detailId"></small><h3 id="detailName"></h3><p id="detailMeta"></p></div><div class="lot"><small>제조번호</small><b id="detailLot"></b></div></div>
     <div id="detailAlert" class="alert" hidden></div>
-    <div class="facts"><div><span>의뢰번호</span><b id="detailRequest"></b></div><div><span>기준 수량</span><b id="detailStandard"></b></div><div><span>유효기한</span><b id="detailExpiry"></b></div><div><span>보관기한</span><b id="detailUntil"></b></div></div>
+    <div class="facts"><div><span>의뢰번호</span><b id="detailRequest"></b></div><div><span>보관량(LIMS)</span><b id="detailStandard"></b></div><div><span>유효기한</span><b id="detailExpiry"></b></div><div><span>보관기한</span><b id="detailUntil"></b></div></div>
     <fieldset><legend>확인 결과</legend><div class="status-row"><label class="checked"><input type="radio" name="workStatus" value="complete" checked>입고 완료</label><label><input type="radio" name="workStatus" value="review">확인 필요</label><label><input type="radio" name="workStatus" value="missing">실물 미확인</label></div></fieldset>
     <div class="entry-row"><label>이 랙 수량<input id="detailQuantity" inputmode="decimal"></label><label>랙코드<div class="rack-input"><input id="detailRack" list="rackCodes"><button type="button" data-scan="rackDetail">▣</button></div></label></div>
     <label>비고<textarea id="detailNote"></textarea></label>

@@ -14,7 +14,12 @@
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : null; };
   const qty = (v) => (v === null || v === undefined ? "—" : `${Math.round(v * 1000) / 1000}`);
   // 포장단위가 없는 검체(마스터에 매핑이 없는 소수 품목)에서는 구분자만 남지 않도록 조건부로 붙인다.
-  const packLabel = (record) => (record?.packagingUnit ? ` · ${esc(record.packagingUnit)}` : "");
+  // 화면 표기: "보관량 80 EA(포장단위: 75ML)". 수량·단위는 LIMS 의 보관품 수량 단위(retentionUnit)이고,
+  // 포장단위는 용기 규격이라 괄호로 덧붙여 서로 헷갈리지 않게 한다.
+  const packNote = (record) => (record?.packagingUnit ? `(포장단위: ${record.packagingUnit})` : "");
+  const stdQtyText = (record) => `${qty(num(record?.retentionQuantity))} ${record?.retentionUnit || ""}`.trim();
+  const stdLabel = (record) => `보관량 ${stdQtyText(record)}${packNote(record)}`;
+  const packLabel = (record) => ` · ${esc(stdLabel(record))}`;
 
   const state = {
     records: [], racks: [], meta: null, rackMeta: null,
@@ -361,7 +366,7 @@
     } else if (result.type === "saved") {
       $("scanReady").textContent = "저장 완료 · 다음 검체를 스캔하세요";
       box.innerHTML = card("ok", `✔ ${esc(result.rackCode)} 저장 완료`,
-        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <b>${qty(result.here)}</b> · 전체 <b>${qty(result.placed)}</b> / 기준 ${qty(num(result.record.retentionQuantity))} ${esc(result.record.retentionUnit || "")}${packLabel(result.record)}</p></div>`,
+        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <b>${qty(result.here)}</b> · 전체 <b>${qty(result.placed)}</b> ${esc(result.record.retentionUnit || "")} / <b>${esc(stdLabel(result.record))}</b></p></div>`,
         `<button class="ghost dark" data-act="undo">방금 저장 취소</button><button class="ghost dark" data-act="detail" data-id="${esc(result.pid)}">수정</button>`);
     } else {
       box.innerHTML = card("bad", "일치하는 검체를 찾지 못했습니다",
@@ -392,16 +397,16 @@
     const placed = sumOf(list);
     const unit = record.retentionUnit || "";
 
-    state.pendingScan = { recordId: record.id, scannedValue, hereQty: num(here?.quantity) || 0, placed, base };
+    state.pendingScan = { recordId: record.id, scannedValue, hereQty: num(here?.quantity) || 0, placed, base, unit };
 
     $("qtyForm").dataset.id = record.id;
     $("qtyName").textContent = record.productName || record.id;
-    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}${record.packagingUnit ? ` · ${record.packagingUnit}` : ""}`;
-    $("qtyMaster").textContent = `${qty(base)} ${unit}`;
+    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}`;
+    $("qtyMaster").textContent = `${stdQtyText(record)}${packNote(record)}`;
     $("qtyPlaced").textContent = `${qty(placed)} ${unit}`;
     $("qtyHere").textContent = `${qty(num(here?.quantity) || 0)} ${unit}`;
     $("qtyRemain").textContent = base === null ? "—" : `${qty(base - placed)} ${unit}`;
-    $("qtyUnit").textContent = unit ? `(${unit})` : "";
+    $("qtyUnit").textContent = unit ? `(${unit} · LIMS 보관량 단위)` : "";
 
     const others = list.filter((p) => p.rackCode !== state.rack.fullCode);
     $("qtyBreakdown").innerHTML = list.length
@@ -433,7 +438,8 @@
     const nextHere = mode === "add" ? pending.hereQty + entered : entered;
     const nextTotal = pending.placed - pending.hereQty + nextHere;
     const over = pending.base !== null && nextTotal > pending.base;
-    $("qtyPreview").textContent = `저장 후 이 랙 ${qty(nextHere)} · 전체 ${qty(nextTotal)}${pending.base === null ? "" : ` / ${qty(pending.base)}`}${over ? "  ⚠ 기준수량 초과" : ""}`;
+    const u = pending.unit ? ` ${pending.unit}` : "";
+    $("qtyPreview").textContent = `저장 후 이 랙 ${qty(nextHere)}${u} · 전체 ${qty(nextTotal)}${u}${pending.base === null ? "" : ` / 보관량 ${qty(pending.base)}${u}`}${over ? "  ⚠ 보관량 초과" : ""}`;
     $("qtyPreview").className = `qty-preview${over ? " over" : ""}`;
   }
 
@@ -525,10 +531,10 @@
     $("detailForm").dataset.id = pid;
     $("detailId").textContent = placement.recordId;
     $("detailName").textContent = record?.productName || placement.recordId;
-    $("detailMeta").textContent = `${record?.itemCode || ""} · 의뢰번호 ${record?.requestNumber || ""}${record?.packagingUnit ? ` · ${record.packagingUnit}` : ""}`;
+    $("detailMeta").textContent = `${record?.itemCode || ""} · 의뢰번호 ${record?.requestNumber || ""}`;
     $("detailLot").textContent = record?.lotNumber || "";
     $("detailRequest").textContent = record?.requestNumber || "—";
-    $("detailStandard").textContent = `${qty(num(record?.retentionQuantity))} ${record?.retentionUnit || ""}`;
+    $("detailStandard").textContent = `${stdQtyText(record)}${packNote(record)}`;
     $("detailExpiry").textContent = date(record?.expiryDate);
     $("detailUntil").textContent = date(record?.retentionUntil);
     $("detailQuantity").value = num(placement.quantity) ?? "";
@@ -671,7 +677,7 @@
     $("candidates").innerHTML = rows.map((r) => {
       const list = index.get(r.id) || [];
       const status = recordStatus(r, list);
-      return `<button class="candidate" data-id="${r.id}"><div class="candidate-main"><div><strong>${esc(r.productName)}</strong><small>${esc(r.itemCode)} · ${esc(r.requestNumber)}${packLabel(r)}</small></div><div><span>제조번호</span><strong>${esc(r.lotNumber)}</strong></div></div><div class="candidate-meta"><span>기준 ${qty(num(r.retentionQuantity))}${esc(r.retentionUnit)}</span><span>보관기한 ${date(r.retentionUntil)}</span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))} · ${list.length}곳` : "미처리"}</span></div></button>`;
+      return `<button class="candidate" data-id="${r.id}"><div class="candidate-main"><div><strong>${esc(r.productName)}</strong><small>${esc(r.itemCode)} · ${esc(r.requestNumber)}</small></div><div><span>제조번호</span><strong>${esc(r.lotNumber)}</strong></div></div><div class="candidate-meta"><span>${esc(stdLabel(r))}</span><span>보관기한 ${date(r.retentionUntil)}</span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))} · ${list.length}곳` : "미처리"}</span></div></button>`;
     }).join("");
     $("candidates").querySelectorAll(".candidate").forEach((b) =>
       b.addEventListener("click", () => {
@@ -706,8 +712,8 @@
       const where = list.map((p) => `${p.rackCode} ${qty(num(p.quantity))}`).join(" · ");
       return `<button class="data-card" data-id="${r.id}">
         <div class="dc-top"><b>${esc(r.productName)}</b><span class="badge ${status}">${recordStatusText[status]}</span></div>
-        <div class="dc-sub">제조 ${esc(r.lotNumber)} · ${esc(r.requestNumber)}${packLabel(r)}</div>
-        <div class="dc-nums"><span>기준 <b>${qty(base)}${esc(r.retentionUnit || "")}</b></span><span>배치 <b>${list.length ? qty(placed) : "—"}</b></span>${diff ? `<span class="diff">차이 <b>${diff > 0 ? "+" : ""}${qty(diff)}</b></span>` : ""}</div>
+        <div class="dc-sub">제조 ${esc(r.lotNumber)} · ${esc(r.requestNumber)}</div>
+        <div class="dc-nums"><span><b>${esc(stdLabel(r))}</b></span><span>배치 <b>${list.length ? qty(placed) : "—"}</b></span>${diff ? `<span class="diff">차이 <b>${diff > 0 ? "+" : ""}${qty(diff)}</b></span>` : ""}</div>
         ${where ? `<div class="dc-where">${esc(where)}</div>` : ""}
       </button>`;
     }).join("") || '<p class="picker-hint">해당하는 검체가 없습니다.</p>';
