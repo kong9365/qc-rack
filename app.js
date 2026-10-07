@@ -324,6 +324,8 @@
   async function processSampleScan(value) {
     if (!state.rack) return toast("먼저 랙을 선택하세요.", "bad");
     if (!currentOperator()) { feedback("error"); return toast("작업자명을 먼저 입력하세요.", "bad"); }
+    // 다른 창에서 저장한 내용이 팝업의 합계·남은 수량에 반영되도록 저장소에서 다시 읽는다.
+    try { state.placements = await dbAll("placements"); } catch { /* 읽기 실패 시 기존 화면 값 사용 */ }
     const hits = matchRecords(value);
     if (!hits.length) {
       feedback("error");
@@ -452,10 +454,19 @@
     if (entered === null) { $("qtyValue").focus(); return toast("수량을 입력하세요.", "bad"); }
     if (entered < 0) return toast("수량은 0 이상이어야 합니다.", "bad");
     const mode = $("qtyForm").querySelector('input[name="qtyMode"]:checked').value;
-    const saved = await savePlacement(record, {
-      quantity: mode === "add" ? pending.hereQty + entered : entered,
-      scannedValue: pending.scannedValue,
-    });
+    // [확인·저장]을 연달아 눌러도 한 번만 처리한다(누적 모드에서 두 번 더해지는 것을 막는다).
+    if (state.savingQty) return;
+    state.savingQty = true;
+    let saved;
+    try {
+      // 누적 기준은 화면에 떠 있는 값이 아니라 저장소의 최신 값이다.
+      // 홈 화면 앱과 브라우저를 함께 열어 둔 경우 다른 창에서 저장한 값을 덮어쓰지 않기 위함이다.
+      const latest = await dbGet("placements", placementId(record.id, state.rack.fullCode));
+      saved = await savePlacement(record, {
+        quantity: mode === "add" ? (num(latest?.quantity) || 0) + entered : entered,
+        scannedValue: pending.scannedValue,
+      });
+    } finally { state.savingQty = false; }
     $("qtyModal").hidden = true;
     state.pendingScan = null;
     state.scanSession++;
@@ -480,7 +491,7 @@
     const rackCode = (overrides.rackCode || state.rack.fullCode).toUpperCase();
     const rack = findRack(rackCode) || state.rack;
     const id = placementId(record.id, rackCode);
-    const previous = state.placements.find((p) => p.id === id) || null;
+    const previous = (await dbGet("placements", id)) || null;   // 화면 목록이 아니라 저장소의 최신 값 기준
     const item = {
       id, recordId: record.id, rackCode,
       zone: rack.zone, rackBase: rack.rackBaseCode, level: rack.level,
