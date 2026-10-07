@@ -198,7 +198,8 @@
   const findRack = (code) => state.racks.find((r) => normalize(r.fullCode) === normalize(code));
 
   function renderPicker() {
-    const zones = device.isMaster || !device.zones.length ? zoneList() : zoneList().filter((z) => device.zones.includes(z));
+    const mine = zoneList().filter((z) => device.zones.includes(z));
+    const zones = device.isMaster || !mine.length ? zoneList() : mine;
     $("zoneGrid").innerHTML = zones.map((z) => {
       const label = state.racks.find((r) => r.zone === z)?.zoneLabel || z;
       return `<button class="chip big zone-chip ${state.pickZone === z ? "on" : ""}" data-pick="zone" data-value="${esc(z)}"><b>${esc(z)}</b><small>${esc(label)}</small></button>`;
@@ -1479,6 +1480,11 @@
       applyMaster(master);
 
       loadDevice();
+      // 랙 코드 체계가 바뀌기 전(예: "A")에 저장된 담당 구역이 남아 있으면 구역 버튼이 하나도 안 나온다.
+      // 현재 마스터에 없는 구역은 설정에서 제거한다.
+      const knownZones = new Set(state.racks.map((r) => r.zone));
+      const keptZones = (device.zones || []).filter((z) => knownZones.has(z));
+      if (keptZones.length !== (device.zones || []).length) saveDevice({ zones: keptZones });
       $("rackCodes").innerHTML = [...new Set(state.racks.map((r) => r.fullCode))].sort()
         .map((code) => `<option value="${esc(code)}"></option>`).join("");
       $("sourceInfo").textContent = `${state.meta.sourceFile} · ${state.rackMeta.sourceFile}`;
