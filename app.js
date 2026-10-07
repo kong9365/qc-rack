@@ -310,7 +310,7 @@
     // 반대로 스캐너 트리거를 다시 당기거나 직접 입력한 것은 "한 개 더 넣겠다"는 의도이므로 그대로 처리한다.
     if (source === "camera") {
       const stamp = Date.now();
-      if (value === state.lastScan.value && stamp - state.lastScan.at < 2500) return;
+      if (value === state.lastScan.value && stamp - state.lastScan.at < 2500) return "skipped";
       state.lastScan = { value, at: stamp };
     }
     await processSampleScan(value);
@@ -320,10 +320,29 @@
     if (!state.rack) return toast("먼저 랙을 선택하세요.", "bad");
     if (!currentOperator()) { feedback("error"); return toast("작업자명을 먼저 입력하세요.", "bad"); }
     const hits = matchRecords(value);
-    if (!hits.length) { feedback("error"); return showScanResult({ type: "none", value }); }
-    if (hits.length > 1) { feedback("warn"); return showScanResult({ type: "multi", value, hits }); }
+    if (!hits.length) {
+      feedback("error");
+      showScanResult({ type: "none", value });
+      return scannerNotice(`읽힌 값: ${value} — 마스터에 없는 코드입니다. 계속 스캔할 수 있습니다.`);
+    }
+    if (hits.length > 1) {
+      feedback("warn");
+      if (!$("scanModal").hidden) closeScanner();   // 후보 목록이 스캐너 창에 가려지지 않게 닫는다
+      return showScanResult({ type: "multi", value, hits });
+    }
     feedback("ok");
     openQuantity(hits[0], value);
+  }
+
+  // 카메라로 읽었는데 마스터에 없는 코드면 결과 카드가 스캐너 창 뒤에 그려져 아무 반응이 없는 것처럼 보였다.
+  // 읽힌 값을 스캐너 창 안에 보여 주고, 멈춘 스캔 루프를 다시 돌린다.
+  function scannerNotice(text) {
+    if ($("scanModal").hidden) return;
+    const box = $("scanError");
+    box.textContent = text; box.hidden = false;
+    clearTimeout(state.noticeTimer);
+    state.noticeTimer = setTimeout(() => { box.hidden = true; }, 6000);
+    scanLoop();
   }
 
   function showScanResult(result) {
@@ -928,6 +947,11 @@
     return nativeDetector;
   }
 
+  // 같은 코드를 연속으로 읽어 무시한 경우(handleScan 이 "skipped")에는 루프를 멈추지 않고 계속 돈다.
+  function resumeIfSkipped(result) {
+    if (result === "skipped" && state.stream && $("qtyModal").hidden) state.scanFrame = setTimeout(scanLoop, 80);
+  }
+
   let scanRun = 0;
   async function scanLoop() {
     if (!state.stream || !$("qtyModal").hidden) return; // 수량 입력 중에는 멈춘다
@@ -942,7 +966,7 @@
           // 기다리는 사이 카메라가 닫히거나 다른 루프가 시작됐다면 이 결과는 버린다.
           if (run !== scanRun || !state.stream || !$("qtyModal").hidden) return;
           const text = found.find((b) => b.rawValue)?.rawValue;
-          if (text) return handleScan(text, "camera");
+          if (text) return resumeIfSkipped(await handleScan(text, "camera"));
         } catch { /* 이 프레임은 건너뛰고 라이브러리로 시도 */ }
       }
       if (run !== scanRun || !state.stream) return;
@@ -950,10 +974,10 @@
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const qr = jsQR(image.data, image.width, image.height, { inversionAttempts: "attemptBoth" });
-      if (qr?.data) return handleScan(qr.data, "camera");
+      if (qr?.data) return resumeIfSkipped(await handleScan(qr.data, "camera"));
       if (++scanTick % 2 === 0) {
         const oneD = decodeOneD(canvas);
-        if (oneD) return handleScan(oneD, "camera");
+        if (oneD) return resumeIfSkipped(await handleScan(oneD, "camera"));
       }
     }
     // requestAnimationFrame 은 창이 비활성이면 멈춘다. 스캔은 계속 돌아야 하므로 타이머로 돌린다.
