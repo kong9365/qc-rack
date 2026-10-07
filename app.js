@@ -811,14 +811,22 @@
   async function startCamera() {
     stopCamera();
     const saved = localStorage.getItem("qc-camera");
+    // 해상도를 지정하지 않으면 폰이 640x480 같은 낮은 해상도로 열어 작은 QR 이 뭉개진다.
+    const quality = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     const constraints = state.cameras.length && state.cameraIndex >= 0
-      ? { video: { deviceId: { exact: state.cameras[state.cameraIndex].deviceId } }, audio: false }
-      : { video: saved ? { deviceId: { ideal: saved } } : { facingMode: { ideal: "environment" } }, audio: false };
+      ? { video: { deviceId: { exact: state.cameras[state.cameraIndex].deviceId }, ...quality }, audio: false }
+      : { video: saved ? { deviceId: { ideal: saved }, ...quality } : { facingMode: { ideal: "environment" }, ...quality }, audio: false };
     try {
       state.stream = await navigator.mediaDevices.getUserMedia(constraints);
       const video = $("video");
       video.srcObject = state.stream;
       await video.play();
+      // 가까운 라벨에 초점이 계속 맞도록 연속 초점을 요청한다(지원하지 않는 기기는 무시).
+      try {
+        const track = state.stream.getVideoTracks()[0];
+        const caps = track.getCapabilities?.() || {};
+        if (caps.focusMode?.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+      } catch { /* 초점 제어 미지원 */ }
       await refreshCameraList();
       scanLoop();
     } catch {
@@ -904,10 +912,40 @@
     return null;
   }
 
-  function scanLoop() {
+  // 크롬(안드로이드)은 기기에 내장된 바코드 인식기를 제공한다. 라이브러리보다 빠르고 흐린 화면에도 강해서
+  // 있으면 먼저 쓰고, 없거나 못 읽으면 아래 jsQR/ZXing 로 넘어간다.
+  let nativeDetector, nativeChecked = false;
+  async function getNativeDetector() {
+    if (nativeChecked) return nativeDetector;
+    nativeChecked = true;
+    try {
+      if (!("BarcodeDetector" in window)) return null;
+      const want = ["qr_code", "code_128", "code_39", "code_93", "itf", "codabar", "ean_13", "ean_8", "upc_a", "upc_e"];
+      const have = await BarcodeDetector.getSupportedFormats();
+      const formats = want.filter((f) => have.includes(f));
+      if (formats.length) nativeDetector = new BarcodeDetector({ formats });
+    } catch { nativeDetector = null; }
+    return nativeDetector;
+  }
+
+  let scanRun = 0;
+  async function scanLoop() {
     if (!state.stream || !$("qtyModal").hidden) return; // 수량 입력 중에는 멈춘다
+    clearTimeout(state.scanFrame);
+    const run = ++scanRun;
     const video = $("video"), canvas = $("scanCanvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const detector = await getNativeDetector();
+      if (detector) {
+        try {
+          const found = await detector.detect(video);
+          // 기다리는 사이 카메라가 닫히거나 다른 루프가 시작됐다면 이 결과는 버린다.
+          if (run !== scanRun || !state.stream || !$("qtyModal").hidden) return;
+          const text = found.find((b) => b.rawValue)?.rawValue;
+          if (text) return handleScan(text, "camera");
+        } catch { /* 이 프레임은 건너뛰고 라이브러리로 시도 */ }
+      }
+      if (run !== scanRun || !state.stream) return;
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
