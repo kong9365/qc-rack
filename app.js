@@ -275,25 +275,38 @@
   }
 
   /* ---------------- 스캔 값 → 마스터 매칭 ---------------- */
+  // 스캔값 → 검체 찾기. 확실한 정도에 따라 단계를 나누고, 결과 배열에 how(찾은 방식)를 붙인다.
+  //   exact / token : 스캔값(또는 스캔값 속 단어)이 의뢰번호·시험번호·검체ID 와 정확히 같다 → 바로 수량 입력
+  //   itemlot       : 품목코드와 제조번호가 모두 단어로 들어 있다            → 맞는지 확인 후 선택
+  //   lot           : 스캔값 전체가 제조번호와 같다(같은 제조번호가 여러 품목에 있을 수 있음) → 후보에서 선택
+  //   contained     : 긴 의뢰번호(8자 이상)가 스캔값 안에 들어 있다           → 맞는지 확인 후 선택
+  // 예전에는 "스캔값 안에 제조번호(4자 이상)가 들어 있기만 하면" 그 품목으로 인정했는데, 제조번호의 대부분이
+  // 5자 이하 숫자라서 일련번호·EAN 같은 숫자 코드가 전혀 다른 품목으로 조회되는 일이 있었다. 그 규칙은 없앴다.
   function matchRecords(raw) {
     const key = normalize(raw);
-    if (!key) return [];
-    const exact = (field) => state.records.filter((r) => normalize(r[field]) && normalize(r[field]) === key);
-    for (const field of ["requestNumber", "id", "testNumber", "lotNumber"]) {
-      const hits = exact(field);
-      if (hits.length) return hits;
+    const done = (hits, how) => { hits.how = how; return hits; };
+    if (!key) return done([], "none");
+    const norm = (r, f) => normalize(r[f]);
+    const pick = (fields, test) => state.records.filter((r) => fields.some((f) => { const v = norm(r, f); return v && test(v); }));
+
+    const exact = pick(["requestNumber", "id", "testNumber"], (v) => v === key);
+    if (exact.length) return done(exact, "exact");
+
+    const tokens = [...new Set(String(raw).split(/[^0-9A-Za-z가-힣]+/).map(normalize).filter((t) => t.length >= 3))];
+    if (tokens.length > 1) {
+      const set = new Set(tokens);
+      const token = pick(["requestNumber", "id", "testNumber"], (v) => set.has(v));
+      if (token.length) return done(token, "token");
+      const itemlot = state.records.filter((r) => { const c = norm(r, "itemCode"), l = norm(r, "lotNumber"); return c && l && set.has(c) && set.has(l); });
+      if (itemlot.length) return done(itemlot, "itemlot");
     }
-    const contained = state.records.filter((r) => {
-      const req = normalize(r.requestNumber), id = normalize(r.id);
-      return (req.length >= 6 && key.includes(req)) || (id.length >= 6 && key.includes(id));
-    });
-    if (contained.length) return contained;
-    const combo = state.records.filter((r) => {
-      const code = normalize(r.itemCode), lot = normalize(r.lotNumber);
-      return code && lot && key.includes(code) && key.includes(lot);
-    });
-    if (combo.length) return combo;
-    return state.records.filter((r) => normalize(r.lotNumber).length >= 4 && key.includes(normalize(r.lotNumber)));
+
+    const lot = pick(["lotNumber"], (v) => v === key);
+    if (lot.length) return done(lot, "lot");
+
+    const contained = pick(["requestNumber"], (v) => v.length >= 8 && key.includes(v));
+    if (contained.length) return done(contained, "contained");
+    return done([], "none");
   }
 
   /* ---------------- 스캔 처리 ---------------- */
@@ -337,10 +350,13 @@
       showScanResult({ type: "none", value });
       return scannerNotice(`읽힌 값: ${value} — 마스터에 없는 코드입니다. 계속 스캔할 수 있습니다.`);
     }
-    if (hits.length > 1) {
+    // 후보가 여럿이거나, 스캔값과 정확히 일치하지 않고 짐작으로 찾은 경우에는 바로 저장 화면으로 가지 않고
+    // 어떤 검체인지 확인하게 한다(엉뚱한 품목에 수량이 들어가는 것을 막는다).
+    const sure = hits.how === "exact" || hits.how === "token";
+    if (hits.length > 1 || !sure) {
       feedback("warn");
       if (!$("scanModal").hidden) closeScanner();   // 후보 목록이 스캐너 창에 가려지지 않게 닫는다
-      return showScanResult({ type: "multi", value, hits });
+      return showScanResult({ type: "multi", value, hits, how: hits.how });
     }
     feedback("ok");
     openQuantity(hits[0], value);
@@ -364,7 +380,8 @@
 
     if (result.type === "multi") {
       const index = placementIndex();
-      box.innerHTML = card("info", `후보 ${result.hits.length}건 · 하나를 선택하세요`,
+      const howText = { itemlot: "품목코드·제조번호가 스캔값에 들어 있어 찾았습니다", lot: "제조번호가 같은 검체입니다", contained: "스캔값에 의뢰번호가 포함되어 찾았습니다" }[result.how];
+      box.innerHTML = card("info", `후보 ${result.hits.length}건 · ${howText ? `${howText}. ` : ""}맞는 검체를 선택하세요`,
         `<div class="result-list">${result.hits.slice(0, 12).map((r) => {
           const list = index.get(r.id) || [];
           const status = recordStatus(r, list);
@@ -408,7 +425,9 @@
 
     $("qtyForm").dataset.id = record.id;
     $("qtyName").textContent = record.productName || record.id;
-    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}`;
+    const scanned = String(scannedValue || "");
+    $("qtyMeta").textContent = `제조 ${record.lotNumber || "—"} · 의뢰 ${record.requestNumber || "—"} · ${record.itemCode || ""}`
+      + (scanned && normalize(scanned) !== normalize(record.requestNumber) ? ` · 스캔값 ${scanned.length > 28 ? `${scanned.slice(0, 28)}…` : scanned}` : "");
     $("qtyMaster").textContent = `${stdQtyText(record)}${packNote(record)}`;
     $("qtyPlaced").textContent = `${qty(placed)} ${unit}`;
     $("qtyHere").textContent = `${qty(num(here?.quantity) || 0)} ${unit}`;
