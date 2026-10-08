@@ -17,8 +17,13 @@
   // 화면 표기: "보관량 80 EA(포장단위: 75ML)". 수량·단위는 LIMS 의 보관품 수량 단위(retentionUnit)이고,
   // 포장단위는 용기 규격이라 괄호로 덧붙여 서로 헷갈리지 않게 한다.
   const packNote = (record) => (record?.packagingUnit ? `(포장단위: ${record.packagingUnit})` : "");
-  const stdQtyText = (record) => `${qty(num(record?.retentionQuantity))} ${record?.retentionUnit || ""}`.trim();
-  const stdLabel = (record) => `보관량 ${stdQtyText(record)}${packNote(record)}`;
+  // 조정 입력(음수 보관량)이 있는 검체는 LIMS 값(retentionQuantity)은 그대로 두고, 합산한 실물 수량(physicalQuantity)을
+  // 판정·화면 표시에 쓴다. 시트·LIMS 내보내기에는 LIMS 값과 함께 올라가 이관 자료가 LIMS 와 어긋나지 않는다.
+  const baseOf = (record) => { const p = num(record?.physicalQuantity); return p !== null ? p : num(record?.retentionQuantity); };
+  const adjSuffix = (record) => (num(record?.physicalQuantity) !== null
+    ? ` · LIMS ${qty(num(record.retentionQuantity))} ${record.retentionUnit || ""}`.trimEnd() + "에서 조정 반영" : "");
+  const stdQtyText = (record) => `${qty(baseOf(record))} ${record?.retentionUnit || ""}`.trim();
+  const stdLabel = (record) => `보관량 ${stdQtyText(record)}${packNote(record)}${adjSuffix(record)}`;
   const packLabel = (record) => ` · ${esc(stdLabel(record))}`;
 
   const state = {
@@ -50,7 +55,7 @@
 
   function recordStatus(record, list) {
     if (!list || !list.length) return "pending";
-    const base = num(record?.retentionQuantity);
+    const base = baseOf(record);
     if (base === null) return "nobase";
     const placed = sumOf(list);
     if (placed === base) return "match";
@@ -363,7 +368,7 @@
         `<div class="result-list">${result.hits.slice(0, 12).map((r) => {
           const list = index.get(r.id) || [];
           const status = recordStatus(r, list);
-          return `<button class="result-pick" data-act="pick" data-id="${r.id}"><span><b>${esc(r.productName)}</b><small>${esc(r.requestNumber)} · 제조 ${esc(r.lotNumber)}${packLabel(r)}</small></span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))}/${qty(num(r.retentionQuantity))}` : "미처리"}</span></button>`;
+          return `<button class="result-pick" data-act="pick" data-id="${r.id}"><span><b>${esc(r.productName)}</b><small>${esc(r.requestNumber)} · 제조 ${esc(r.lotNumber)}${packLabel(r)}</small></span><span class="badge ${status}">${list.length ? `${qty(sumOf(list))}/${qty(baseOf(r))}` : "미처리"}</span></button>`;
         }).join("")}</div>`, "");
     } else if (result.type === "saved") {
       $("scanReady").textContent = "저장 완료 · 다음 검체를 스캔하세요";
@@ -395,7 +400,7 @@
   function openQuantity(record, scannedValue) {
     const list = placementIndex().get(record.id) || [];
     const here = list.find((p) => p.rackCode === state.rack.fullCode);
-    const base = num(record.retentionQuantity);
+    const base = baseOf(record);
     const placed = sumOf(list);
     const unit = record.retentionUnit || "";
 
@@ -416,6 +421,7 @@
       : "";
 
     const alerts = [];
+    if (record.adjustmentNote) alerts.push(record.adjustmentNote + ".");
     if (others.length) alerts.push(`다른 랙 ${others.length}곳에 ${qty(sumOf(others))} ${unit} 이 이미 등록되어 있습니다.`);
     if (here) alerts.push(`이 랙에 이미 ${qty(num(here.quantity))} ${unit} 기록이 있습니다. 누적하면 합산됩니다.`);
     $("qtyAlert").hidden = !alerts.length;
@@ -667,7 +673,7 @@
       ...rows.map((p) => {
         const record = rmap.get(p.recordId);
         const list = index.get(p.recordId) || [];
-        const elsewhere = list.length > 1 ? `<em>다른 랙 ${list.length - 1}곳 · 합계 ${qty(sumOf(list))}/${qty(num(record?.retentionQuantity))}</em>` : "";
+        const elsewhere = list.length > 1 ? `<em>다른 랙 ${list.length - 1}곳 · 합계 ${qty(sumOf(list))}/${qty(baseOf(record))}</em>` : "";
         return `<button class="rack-item" data-id="${esc(p.id)}"><span><b>${esc(record?.productName || p.recordId)}</b><small>제조 ${esc(record?.lotNumber)} · ${esc(record?.requestNumber)}${packLabel(record)}</small>${elsewhere}</span><span class="qty-badge">${qty(num(p.quantity))}<small>${esc(p.unit || "")}</small></span></button>`;
       }),
       ...extras.map((u) => `<div class="rack-item extra"><span><b>${esc(u.productName)}</b><small>제조 ${esc(u.lotNumber)} · 목록 외</small></span><span class="qty-badge">${qty(num(u.quantity))}<small>${esc(u.unit || "")}</small></span></div>`),
@@ -718,7 +724,7 @@
     $("listBody").innerHTML = rows.slice((state.page - 1) * 20, state.page * 20).map((r) => {
       const list = index.get(r.id) || [];
       const status = recordStatus(r, list);
-      const base = num(r.retentionQuantity), placed = sumOf(list);
+      const base = baseOf(r), placed = sumOf(list);
       const diff = base === null || !list.length ? null : placed - base;
       const where = list.map((p) => `${p.rackCode} ${qty(num(p.quantity))}`).join(" · ");
       return `<button class="data-card" data-id="${r.id}">
@@ -768,13 +774,13 @@
       const record = rmap.get(recordId);
       const status = recordStatus(record, list);
       if (status === "short" || status === "over") {
-        rows.push({ kind: recordStatusText[status], record, base: num(record?.retentionQuantity), placed: sumOf(list),
+        rows.push({ kind: recordStatusText[status], record, base: baseOf(record), placed: sumOf(list),
           detail: list.map((p) => `${p.rackCode} ${qty(num(p.quantity))}`).join(", "), by: list[0]?.updatedBy });
       }
     }
     state.placements.filter((p) => p.workStatus !== "complete").forEach((p) => {
       const record = rmap.get(p.recordId);
-      rows.push({ kind: statusText[p.workStatus], record, base: num(record?.retentionQuantity), placed: num(p.quantity), detail: p.rackCode, by: p.updatedBy });
+      rows.push({ kind: statusText[p.workStatus], record, base: baseOf(record), placed: num(p.quantity), detail: p.rackCode, by: p.updatedBy });
     });
     state.unlisted.forEach((u) => rows.push({ kind: "목록 외 실물", record: { productName: u.productName, lotNumber: u.lotNumber, requestNumber: "—" }, base: null, placed: num(u.quantity), detail: u.rackCode, by: u.updatedBy }));
     state.conflicts.forEach((c) => rows.push({ kind: "병합 충돌", record: rmap.get(c.recordId), base: null, placed: null,
@@ -1014,10 +1020,10 @@
       const list = (index.get(record.id) || []).slice().sort((a, b) => a.rackCode.localeCompare(b.rackCode));
       const status = recordStatus(record, list);
       if (onlyIssues && (status === "match")) return null;
-      const base = num(record.retentionQuantity), placed = sumOf(list);
+      const base = baseOf(record), placed = sumOf(list);
       const latest = list.slice().sort(byNewest)[0];
       return [record.id, record.requestNumber, record.itemCode, record.productName, record.lotNumber, record.packagingUnit || "",
-        record.expiryDate, record.retentionUntil, qty(base), record.retentionUnit || "",
+        record.expiryDate, record.retentionUntil, qty(num(record.retentionQuantity)), record.retentionUnit || "",
         list.length ? qty(placed) : "", base === null || !list.length ? "" : qty(placed - base),
         list.length, list.map((p) => `${p.rackCode}:${qty(num(p.quantity))}`).join("; "),
         recordStatusText[status], latest?.updatedBy || "", latest?.deviceName || "", latest?.updatedAt || ""];
@@ -1058,11 +1064,11 @@
     for (const record of state.records) {
       const list = (index.get(record.id) || []).slice().sort((a, b) => a.rackCode.localeCompare(b.rackCode));
       if (!list.length) continue;
-      const base = num(record.retentionQuantity), placed = sumOf(list);
+      const base = baseOf(record), placed = sumOf(list);   // 판정은 실물 기준
       const unit = record.retentionUnit || "EA";
       const latest = list.slice().sort(byNewest)[0];
       rows.push([++seq, record.requestNumber, record.itemCode, record.lotNumber,
-        record.productName, record.testNumber, qty(base), unit, record.containerCount,
+        record.productName, record.testNumber, qty(num(record.retentionQuantity)), unit, record.containerCount,
         limsNote(list, unit), list[0].rackCode,
         qty(placed), list.length,
         base === null ? "기준없음" : (placed === base ? "일치" : placed < base ? "부족" : "초과"),
@@ -1230,7 +1236,9 @@
         rackCode: item.rackCode, zone: item.zone, rackBase: item.rackBase, level: item.level,
         quantity: item.quantity, unit: item.unit || record?.retentionUnit || "",
         // LIMS 대조를 위해 마스터 기준수량을 함께 올린다. 시트에서 차이를 계산한다.
-        baseQuantity: record?.retentionQuantity ?? null,
+        baseQuantity: record?.retentionQuantity ?? null,              // LIMS 검체량(그대로)
+        expectedQuantity: record?.physicalQuantity ?? null,           // 조정 합산한 실물 기준(없으면 null)
+        limsSampleId: record?.limsSampleId || "",                     // 이관 업체가 LIMS 행을 찾는 키
         workStatus: item.workStatus, scanCount: item.scanCount || 1, note: item.note || "",
         updatedBy: item.updatedBy, deviceName: item.deviceName, deviceId: item.deviceId,
         // 삭제는 항상 "지금" 시각으로 보낸다. 직전 저장보다 오래된 시각이면 시트가 삭제를 무시한다.
@@ -1511,7 +1519,8 @@
   }
 
   function applyMaster(master) {
-    state.records = master.retention.records; state.meta = master.retention.meta;
+    // 조정 입력(음수 보관량) 레코드는 실물이 없어 스캔할 수 없으므로 목록에서 뺀다(합산값은 양수 레코드에 들어 있다).
+    state.records = master.retention.records.filter((r) => !r.hidden); state.meta = master.retention.meta;
     state.racks = master.rack.racks; state.rackMeta = master.rack.meta;
   }
 
