@@ -352,3 +352,17 @@ button.wide{width:100%;min-height:46px;margin-top:8px}
 .chip.zone-chip small{font-size:9px;font-weight:700;opacity:.75}
 .chip.zone-chip.on small{opacity:.9}
 .picker-row .lv-note{font-size:9px;font-weight:700;color:#9aabb4}
+
+/* ===== 스캐너 조작·진단 ===== */
+.scan-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.zoom-row{display:flex;align-items:center;gap:10px;margin:8px 0 0;font-size:12px;font-weight:700;color:#455c69}
+.zoom-row input[type=range]{flex:1;height:30px;padding:0;margin:0}
+.zoom-row b{min-width:44px;text-align:right}
+.scan-tip{margin:8px 0 0;padding:9px 11px;border-radius:8px;background:#fff4d8;color:#8b5c10;font-size:12px;line-height:1.55}
+.video-wrap{touch-action:manipulation}
+.focus-ring{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(15,143,132,.8);pointer-events:none;animation:focusPing .9s ease-out forwards}
+@keyframes focusPing{from{transform:scale(1.5);opacity:1}to{transform:scale(1);opacity:.2}}
+#photoBtn{margin-top:10px}
+.diag-list{margin:8px 0;display:grid;gap:4px;font-size:11px}
+.diag-list div{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fbfdfe;word-break:break-all}
+.diag-list b{color:var(--teal)}

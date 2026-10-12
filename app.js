@@ -318,6 +318,7 @@
   async function handleScan(raw, source = "input") {
     const value = String(raw || "").trim();
     if (!value) return;
+    state.scanStartAt = Date.now(); $("scanTip").hidden = true;
     if (state.scanMode === "rack") {
       const rack = state.racks.find((r) => normalize(value).includes(normalize(r.fullCode)));
       closeScanner();
@@ -345,6 +346,7 @@
     // 다른 창에서 저장한 내용이 팝업의 합계·남은 수량에 반영되도록 저장소에서 다시 읽는다.
     try { state.placements = await dbAll("placements"); } catch { /* 읽기 실패 시 기존 화면 값 사용 */ }
     const hits = matchRecords(value);
+    diagResult(value, hits.length ? `${hits.length}건(${hits.how}) ${hits[0].productName || ""}`.slice(0, 60) : "마스터에 없음");
     if (!hits.length) {
       feedback("error");
       showScanResult({ type: "none", value });
@@ -850,6 +852,44 @@
     document.querySelectorAll(".segment button").forEach((b) => b.classList.toggle("on", b.dataset.view === name));
   }
 
+  /* ---------------- 스캔 진단 ---------------- */
+  // 어떤 폰·라벨에서 왜 안 읽히는지 알 수 있도록 인식 방식과 처리 속도, 최근 읽은 값을 남긴다(이 기기에만 저장).
+  const diag = { res: "", engine: "", frames: 0, msSum: 0, torch: false, zoom: false, focus: false, recent: [] };
+  try { diag.recent = JSON.parse(localStorage.getItem("qc-scan-diag") || "[]"); } catch { diag.recent = []; }
+  const METHOD_TEXT = { native: "내장 인식기", jsqr: "jsQR", zxing: "ZXing(1차원)", photo: "사진", manual: "직접 입력", wedge: "스캐너 건" };
+  function recordDiag(method, value, ms) {
+    diag.recent.unshift({ at: now(), method, value: String(value || "").slice(0, 80), ms: Math.round(ms || 0), result: "" });
+    diag.recent = diag.recent.slice(0, 30);
+    try { localStorage.setItem("qc-scan-diag", JSON.stringify(diag.recent)); } catch { /* 저장 공간 없음 */ }
+    renderDiag();
+  }
+  function diagResult(value, text) {
+    if (diag.recent[0] && diag.recent[0].value === String(value || "").slice(0, 80)) { diag.recent[0].result = text; try { localStorage.setItem("qc-scan-diag", JSON.stringify(diag.recent)); } catch { /* 무시 */ } renderDiag(); }
+  }
+  function diagText() {
+    const avg = diag.frames ? Math.round(diag.msSum / diag.frames) : null;
+    const lines = [
+      `기기: ${navigator.userAgent}`,
+      `카메라 해상도: ${diag.res || "—"}`,
+      `인식 방식: ${diag.engine || "—"}`,
+      avg === null ? "프레임 처리: —" : `프레임 처리: 평균 ${avg}ms (약 ${Math.max(1, Math.round(1000 / (avg + 80)))}장/초)`,
+      `손전등: ${diag.torch ? "가능" : "없음"} · 확대: ${diag.zoom ? "가능" : "없음"} · 초점 제어: ${diag.focus ? "가능" : "없음"}`,
+      "--- 최근 읽은 값 ---",
+      ...diag.recent.map((d) => `${String(d.at).replace("T", " ").slice(5, 19)} | ${METHOD_TEXT[d.method] || d.method} | ${d.ms}ms | ${d.value}${d.result ? ` → ${d.result}` : ""}`),
+    ];
+    return lines.join("\n");
+  }
+  function renderDiag() {
+    const box = $("diagSummary"), list = $("diagList");
+    if (!box || !list) return;
+    const avg = diag.frames ? Math.round(diag.msSum / diag.frames) : null;
+    box.textContent = diag.res || diag.engine
+      ? `해상도 ${diag.res || "—"} · ${diag.engine || "—"} · ${avg === null ? "처리속도 —" : `프레임당 ${avg}ms`} · 손전등 ${diag.torch ? "○" : "×"} · 확대 ${diag.zoom ? "○" : "×"}`
+      : "카메라를 한 번 사용하면 이 기기의 카메라·인식 방식이 표시됩니다.";
+    list.innerHTML = diag.recent.slice(0, 12).map((d) =>
+      `<div><b>${esc(METHOD_TEXT[d.method] || d.method)}</b> · ${esc(String(d.at).replace("T", " ").slice(5, 16))} · ${d.ms}ms<br>${esc(d.value)}${d.result ? ` → ${esc(d.result)}` : ""}</div>`).join("");
+  }
+
   /* ---------------- 카메라 ---------------- */
   async function openScanner(mode) {
     state.scanMode = mode;
@@ -863,6 +903,7 @@
     $("finishScanBtn").hidden = isRack;
     state.scanSession = 0; $("scanSession").textContent = "0";
     state.lastScan = { value: "", at: 0 };
+    state.scanStartAt = Date.now(); $("scanTip").hidden = true;
     $("scanModal").hidden = false;
     await startCamera();
   }
@@ -888,6 +929,7 @@
         const caps = track.getCapabilities?.() || {};
         if (caps.focusMode?.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
       } catch { /* 초점 제어 미지원 */ }
+      setupTrackControls();
       await refreshCameraList();
       scanLoop();
     } catch {
@@ -922,6 +964,118 @@
     toast(`카메라 전환: ${state.cameras[state.cameraIndex]?.label || `${state.cameraIndex + 1}번`}`);
   }
 
+  // 손전등·확대·탭 초점: 기기가 지원하는 것만 보여 준다(아이폰 Safari 는 대부분 지원하지 않는다).
+  function setupTrackControls() {
+    const track = state.stream?.getVideoTracks?.()[0];
+    const caps = track?.getCapabilities?.() || {};
+    const settings = track?.getSettings?.() || {};
+    const video = $("video");
+    diag.res = `${video.videoWidth || settings.width || "?"}×${video.videoHeight || settings.height || "?"}`;
+    diag.engine = ("BarcodeDetector" in window) ? "내장 인식기 + 라이브러리" : "자바스크립트 라이브러리(jsQR·ZXing)";
+    diag.torch = !!caps.torch; diag.focus = !!caps.focusMode?.length;
+    diag.zoom = !!(caps.zoom && Number(caps.zoom.max) > Number(caps.zoom.min));
+    state.torchOn = false;
+    $("torchBtn").hidden = !diag.torch; $("torchBtn").textContent = "🔦 손전등 켜기";
+    $("zoomRow").hidden = !diag.zoom;
+    if (diag.zoom) {
+      const z = $("zoomRange");
+      z.min = caps.zoom.min; z.max = Math.min(Number(caps.zoom.max), 5); z.step = caps.zoom.step || 0.1;
+      z.value = settings.zoom || caps.zoom.min; $("zoomValue").textContent = `${Number(z.value).toFixed(1)}×`;
+    }
+    renderDiag();
+  }
+  async function applyTrack(constraint) {
+    const track = state.stream?.getVideoTracks?.()[0];
+    if (!track?.applyConstraints) return false;
+    try { await track.applyConstraints({ advanced: [constraint] }); return true; } catch { return false; }
+  }
+  async function toggleTorch() {
+    const next = !state.torchOn;
+    if (await applyTrack({ torch: next })) { state.torchOn = next; $("torchBtn").textContent = next ? "🔦 손전등 끄기" : "🔦 손전등 켜기"; }
+    else toast("이 기기에서는 손전등을 켤 수 없습니다.", "bad");
+  }
+  async function setZoom(value) {
+    const v = Number(value); $("zoomValue").textContent = `${v.toFixed(1)}×`;
+    await applyTrack({ zoom: v });
+  }
+  // 화면을 탭하면 그 지점에 초점을 다시 맞춘다(지원하지 않는 기기에서는 표시만 한다).
+  async function tapFocus(event) {
+    if (event.target.closest("button, input, label")) return;
+    const wrap = $("videoWrap"), rect = wrap.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+    const ring = $("focusRing"); ring.style.left = `${x * 100}%`; ring.style.top = `${y * 100}%`;
+    ring.hidden = true; void ring.offsetWidth; ring.hidden = false;
+    clearTimeout(tapFocus.timer); tapFocus.timer = setTimeout(() => { ring.hidden = true; }, 900);
+    const track = state.stream?.getVideoTracks?.()[0];
+    const modes = track?.getCapabilities?.().focusMode || [];
+    if (modes.includes("single-shot")) {
+      await applyTrack({ pointsOfInterest: [{ x, y }], focusMode: "single-shot" });
+      setTimeout(() => { if (modes.includes("continuous")) applyTrack({ focusMode: "continuous" }); }, 1500);
+    }
+  }
+  function showScanTip() {
+    const tip = $("scanTip");
+    const parts = ["아직 인식되지 않습니다. 라벨에서 15~20cm 떨어져 가운데 상자에 맞춰 보세요."];
+    if (diag.torch) parts.push("어두우면 손전등을 켜세요.");
+    if (diag.zoom) parts.push("라벨이 작으면 확대하세요.");
+    parts.push("화면을 탭하면 초점을 다시 맞춥니다. 계속 안 되면 아래 [사진으로 인식]을 쓰세요.");
+    tip.textContent = parts.join(" "); tip.hidden = false;
+  }
+
+  // 사진 한 장으로 인식: 영상 프레임이 흔들려 못 읽는 라벨을 고해상도 정지 이미지로 다시 시도한다.
+  async function decodePhoto(file) {
+    let bitmap = null;
+    try { bitmap = await createImageBitmap(file); } catch {
+      bitmap = await new Promise((resolve, reject) => {
+        const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = URL.createObjectURL(file);
+      });
+    }
+    const w0 = bitmap.width || bitmap.naturalWidth, h0 = bitmap.height || bitmap.naturalHeight;
+    const scale = Math.min(1, 2000 / Math.max(w0, h0));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(w0 * scale)); canvas.height = Math.max(1, Math.round(h0 * scale));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const detector = await getNativeDetector();
+    if (detector) {
+      try { const found = await detector.detect(canvas); const t = found.find((b) => b.rawValue)?.rawValue; if (t) return { text: t, method: "native" }; } catch { /* 다음 방법 */ }
+    }
+    for (const factor of [1, 0.6, 0.35]) {   // 큰 사진에서 작은 QR 이 안 잡힐 때를 위해 몇 가지 크기로 시도
+      const w = Math.max(1, Math.round(canvas.width * factor)), h = Math.max(1, Math.round(canvas.height * factor));
+      let data;
+      if (factor === 1) data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      else {
+        const c2 = document.createElement("canvas"); c2.width = w; c2.height = h;
+        const x2 = c2.getContext("2d", { willReadFrequently: true }); x2.drawImage(canvas, 0, 0, w, h); data = x2.getImageData(0, 0, w, h);
+      }
+      const qr = jsQR(data.data, data.width, data.height, { inversionAttempts: "attemptBoth" });
+      if (qr?.data) return { text: qr.data, method: "jsqr" };
+    }
+    const oneD = decodeOneD(canvas, true);
+    if (oneD) return { text: oneD, method: "zxing" };
+    return null;
+  }
+  async function recognizePhoto(file) {
+    if (!file) return;
+    toast("사진에서 코드를 찾는 중…");
+    const t0 = performance.now();
+    try {
+      const found = await decodePhoto(file);
+      if (!found) {
+        recordDiag("photo", "(인식 실패)", performance.now() - t0);
+        $("scanTip").textContent = "사진에서 코드를 찾지 못했습니다. 라벨을 화면에 가득 차게, 밝은 곳에서, 초점이 맞게 다시 찍어 보세요. 그래도 안 되면 위의 코드 직접 입력을 쓰세요.";
+        $("scanTip").hidden = false; feedback("error");
+        return;
+      }
+      recordDiag("photo", found.text, performance.now() - t0);
+      $("scanTip").hidden = true;
+      await handleScan(found.text, "photo");
+    } catch (error) {
+      toast("사진을 읽지 못했습니다. 다른 사진으로 다시 시도하세요.", "bad");
+    }
+  }
+
   function stopCamera() {
     if (state.scanFrame) clearTimeout(state.scanFrame);
     state.scanFrame = null;
@@ -949,21 +1103,25 @@
 
   // 1차원 바코드는 가로로 길기 때문에 화면 중앙의 가로 띠만 잘라 넘기면
   // 배경 잡음이 줄어 인식률이 오르고 처리량도 줄어든다.
-  function decodeOneD(sourceCanvas) {
+  function decodeOneD(sourceCanvas, whole) {
     const reader = getOneDReader();
     if (!reader || !sourceCanvas.width) return null;
-    bandCanvas = bandCanvas || document.createElement("canvas");
-    const bandHeight = Math.max(60, Math.round(sourceCanvas.height * 0.45));
-    const top = Math.round((sourceCanvas.height - bandHeight) / 2);
-    bandCanvas.width = sourceCanvas.width;
-    bandCanvas.height = bandHeight;
-    bandCanvas.getContext("2d", { willReadFrequently: true })
-      .drawImage(sourceCanvas, 0, top, sourceCanvas.width, bandHeight, 0, 0, sourceCanvas.width, bandHeight);
+    let target = sourceCanvas;
+    if (!whole) {   // 영상 프레임: 가운데 띠만 읽는다. 사진: 전체를 읽는다.
+      bandCanvas = bandCanvas || document.createElement("canvas");
+      const bandHeight = Math.max(60, Math.round(sourceCanvas.height * 0.45));
+      const top = Math.round((sourceCanvas.height - bandHeight) / 2);
+      bandCanvas.width = sourceCanvas.width;
+      bandCanvas.height = bandHeight;
+      bandCanvas.getContext("2d", { willReadFrequently: true })
+        .drawImage(sourceCanvas, 0, top, sourceCanvas.width, bandHeight, 0, 0, sourceCanvas.width, bandHeight);
+      target = bandCanvas;
+    }
     // 이진화 방식에 따라 인식 여부가 갈린다. Hybrid 는 조명이 고르지 않은 실제 촬영에,
     // GlobalHistogram 은 선명하고 대비가 균일한 라벨에 강해서 둘 다 시도한다.
     for (const Binarizer of [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer]) {
       try {
-        const luminance = new ZXing.HTMLCanvasElementLuminanceSource(bandCanvas);
+        const luminance = new ZXing.HTMLCanvasElementLuminanceSource(target);
         const text = reader.decode(new ZXing.BinaryBitmap(new Binarizer(luminance)))?.getText();
         if (text) return text;
       } catch { /* 이 방식으로는 못 찾음 */ } finally {
@@ -999,6 +1157,7 @@
     if (!state.stream || !$("qtyModal").hidden) return; // 수량 입력 중에는 멈춘다
     clearTimeout(state.scanFrame);
     const run = ++scanRun;
+    const t0 = performance.now();
     const video = $("video"), canvas = $("scanCanvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
       const detector = await getNativeDetector();
@@ -1008,7 +1167,7 @@
           // 기다리는 사이 카메라가 닫히거나 다른 루프가 시작됐다면 이 결과는 버린다.
           if (run !== scanRun || !state.stream || !$("qtyModal").hidden) return;
           const text = found.find((b) => b.rawValue)?.rawValue;
-          if (text) return resumeIfSkipped(await handleScan(text, "camera"));
+          if (text) { recordDiag("native", text, performance.now() - t0); return resumeIfSkipped(await handleScan(text, "camera")); }
         } catch { /* 이 프레임은 건너뛰고 라이브러리로 시도 */ }
       }
       if (run !== scanRun || !state.stream) return;
@@ -1016,11 +1175,13 @@
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const qr = jsQR(image.data, image.width, image.height, { inversionAttempts: "attemptBoth" });
-      if (qr?.data) return resumeIfSkipped(await handleScan(qr.data, "camera"));
+      if (qr?.data) { recordDiag("jsqr", qr.data, performance.now() - t0); return resumeIfSkipped(await handleScan(qr.data, "camera")); }
       if (++scanTick % 2 === 0) {
         const oneD = decodeOneD(canvas);
-        if (oneD) return resumeIfSkipped(await handleScan(oneD, "camera"));
+        if (oneD) { recordDiag("zxing", oneD, performance.now() - t0); return resumeIfSkipped(await handleScan(oneD, "camera")); }
       }
+      diag.frames++; diag.msSum += performance.now() - t0;
+      if ($("scanTip").hidden && Date.now() - (state.scanStartAt || Date.now()) > 8000) showScanTip();
     }
     // requestAnimationFrame 은 창이 비활성이면 멈춘다. 스캔은 계속 돌아야 하므로 타이머로 돌린다.
     state.scanFrame = setTimeout(scanLoop, 80);
@@ -1426,6 +1587,16 @@
       handleScan(value);
     });
     on("switchCamBtn", "click", switchCamera);
+    on("torchBtn", "click", toggleTorch);
+    on("zoomRange", "input", (e) => setZoom(e.target.value));
+    on("videoWrap", "click", tapFocus);
+    on("photoBtn", "click", () => $("photoInput").click());
+    on("photoInput", "change", (e) => { const f = e.target.files?.[0]; e.target.value = ""; recognizePhoto(f); });
+    on("diagCopy", "click", async () => {
+      try { await navigator.clipboard.writeText(diagText()); toast("진단 내용을 복사했습니다. 메시지에 붙여 넣어 보내 주세요."); }
+      catch { prompt("아래 내용을 복사하세요", diagText()); }
+    });
+    on("diagClear", "click", () => { diag.recent = []; try { localStorage.removeItem("qc-scan-diag"); } catch { /* 무시 */ } renderDiag(); toast("스캔 기록을 지웠습니다."); });
     on("finishScanBtn", "click", closeScanner);
     on("manualApply", "click", () => handleScan($("manualScan").value));
     on("manualScan", "keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); handleScan(e.target.value); } });

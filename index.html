@@ -168,6 +168,14 @@
         <button class="ghost dark wide" id="rackExport">랙별 집계 CSV</button>
       </details>
 
+      <details class="panel more" id="scanDiag">
+        <summary>스캔 진단</summary>
+        <p class="more-note" id="diagSummary">카메라를 한 번 사용하면 이 기기의 카메라·인식 방식이 표시됩니다.</p>
+        <div id="diagList" class="diag-list"></div>
+        <button class="ghost dark wide" id="diagCopy">진단 내용 복사</button>
+        <button class="ghost dark wide" id="diagClear">기록 지우기</button>
+      </details>
+
       <details class="panel more">
         <summary>작업자별 취합 현황</summary>
         <p class="more-note" id="deviceTotal"></p>
@@ -204,11 +212,15 @@
   <!-- 스캐너 -->
   <div id="scanModal" class="modal-backdrop" hidden><div class="modal scanner-modal">
     <div class="modal-head"><div><small>CAMERA</small><h2 id="scanTitle">촬영</h2></div><span class="scan-session">세션 <b id="scanSession">0</b>건</span><button data-close="scan">×</button></div>
-    <div class="video-wrap"><video id="video" playsinline muted></video><canvas id="scanCanvas" hidden></canvas><i></i></div>
-    <div class="scan-controls"><button type="button" class="ghost dark" id="switchCamBtn" hidden>⟳ 카메라 전환</button><span class="cam-label" id="camLabel"></span></div>
+    <div class="video-wrap" id="videoWrap"><video id="video" playsinline muted></video><canvas id="scanCanvas" hidden></canvas><i></i><span class="focus-ring" id="focusRing" hidden></span></div>
+    <div class="scan-controls"><button type="button" class="ghost dark" id="switchCamBtn" hidden>⟳ 카메라 전환</button><button type="button" class="ghost dark" id="torchBtn" hidden>🔦 손전등 켜기</button><span class="cam-label" id="camLabel"></span></div>
+    <label class="zoom-row" id="zoomRow" hidden>확대 <input type="range" id="zoomRange" min="1" max="1" step="0.1" value="1"><b id="zoomValue">1.0×</b></label>
     <p id="scanHint">바코드를 가운데 띠에 맞추세요.</p>
+    <p class="scan-tip" id="scanTip" hidden></p>
     <div id="scanError" class="alert" hidden></div>
     <div class="manual"><input id="manualScan" placeholder="코드 직접 입력"><button id="manualApply" class="primary">적용</button></div>
+    <button type="button" class="ghost dark wide" id="photoBtn">📷 사진으로 인식 (한 장 찍어서 코드 찾기)</button>
+    <input type="file" id="photoInput" accept="image/*" hidden>
     <button type="button" class="save" id="finishScanBtn">✓ 완료 · 카메라 끄기</button>
   </div></div>
 
