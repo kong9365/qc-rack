@@ -392,7 +392,7 @@
     } else if (result.type === "saved") {
       $("scanReady").textContent = "저장 완료 · 다음 검체를 스캔하세요";
       box.innerHTML = card("ok", `✔ ${esc(result.rackCode)} 저장 완료`,
-        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <b>${qty(result.here)}</b> · 전체 <b>${qty(result.placed)}</b> ${esc(result.record.retentionUnit || "")} / <b>${esc(stdLabel(result.record))}</b></p></div>`,
+        `<div class="result-body"><strong>${esc(result.record.productName)}</strong><p>이 랙 <button type="button" class="qty-edit" data-act="quick" data-id="${esc(result.pid)}">${qty(result.here)} ✎</button> · 전체 <b>${qty(result.placed)}</b> ${esc(result.record.retentionUnit || "")} / <b>${esc(stdLabel(result.record))}</b></p></div>`,
         `<button class="ghost dark" data-act="undo">방금 저장 취소</button><button class="ghost dark" data-act="detail" data-id="${esc(result.pid)}">수정</button>`);
     } else {
       box.innerHTML = card("bad", "일치하는 검체를 찾지 못했습니다",
@@ -405,6 +405,7 @@
   async function onResultAction(act, id, result) {
     if (act === "undo") return undoLast();
     if (act === "detail") return openDetail(id);
+    if (act === "quick") return openQuickEdit(id);
     if (act === "search") { $("manualSearch").open = true; $("productQuery").value = result.value || ""; renderCandidates(); return $("productQuery").focus(); }
     if (act === "unlisted") return openUnlisted();
     if (act === "pick") {
@@ -448,14 +449,17 @@
     $("qtyAlert").hidden = !alerts.length;
     $("qtyAlert").textContent = alerts.join(" ");
 
-    $("qtyValue").value = "";
+    // 바코드를 찍으면 마스터 기준 남은 수량을 바로 채워 두어 [확인·저장] 한 번으로 끝난다(다르면 고친다).
+    const prefill = base !== null && base - placed > 0 ? base - placed : "";
+    $("qtyValue").value = prefill === "" ? "" : String(Math.round(prefill * 1000) / 1000);
+    if (prefill !== "") $("qtyUnit").textContent += " · 마스터 기준 자동 입력";
     $("qtyForm").querySelectorAll('input[name="qtyMode"]').forEach((r) => {
       r.checked = r.value === "add";
       r.closest("label").classList.toggle("checked", r.checked);
     });
     updateQtyPreview();
     $("qtyModal").hidden = false;
-    setTimeout(() => $("qtyValue").focus(), 40);
+    setTimeout(() => { $("qtyValue").focus(); $("qtyValue").select?.(); }, 40);
   }
 
   function updateQtyPreview() {
@@ -516,7 +520,7 @@
   /* ---------------- 저장 · 되돌리기 ---------------- */
   async function savePlacement(record, overrides = {}) {
     const rackCode = (overrides.rackCode || state.rack.fullCode).toUpperCase();
-    const rack = findRack(rackCode) || state.rack;
+    const rack = findRack(rackCode) || resolveRack(rackCode) || state.rack;
     const id = placementId(record.id, rackCode);
     const previous = (await dbGet("placements", id)) || null;   // 화면 목록이 아니라 저장소의 최신 값 기준
     const item = {
@@ -558,6 +562,114 @@
     await refreshStored(); resetScanResult();
     toast("방금 저장을 취소했습니다.");
     focusScan();
+  }
+
+  /* ---------------- 수량 빠른 수정 ---------------- */
+  function updateQuickPreview() {
+    const pid = $("quickForm").dataset.id, placement = state.placements.find((p) => p.id === pid);
+    if (!placement) return;
+    const record = state.records.find((r) => r.id === placement.recordId);
+    const list = placementIndex().get(placement.recordId) || [];
+    const entered = num($("quickValue").value), base = baseOf(record);
+    if (entered === null) { $("quickPreview").textContent = "수량을 입력하세요."; $("quickPreview").className = "qty-preview"; return; }
+    const total = sumOf(list) - (num(placement.quantity) || 0) + entered;
+    const over = base !== null && total > base;
+    const u = placement.unit ? ` ${placement.unit}` : "";
+    $("quickPreview").textContent = `수정 후 이 랙 ${qty(entered)}${u} · 전체 ${qty(total)}${u}${base === null ? "" : ` / 보관량 ${qty(base)}${u}`}${over ? "  ⚠ 보관량 초과" : ""}`;
+    $("quickPreview").className = `qty-preview${over ? " over" : ""}`;
+  }
+  function openQuickEdit(pid) {
+    const placement = state.placements.find((p) => p.id === pid);
+    if (!placement) return;
+    const record = state.records.find((r) => r.id === placement.recordId);
+    $("quickForm").dataset.id = pid;
+    $("quickName").textContent = record?.productName || placement.recordId;
+    $("quickMeta").textContent = `${placement.rackCode} · 제조 ${record?.lotNumber || "—"} · 의뢰 ${record?.requestNumber || "—"}`;
+    $("quickUnit").textContent = placement.unit ? `(${placement.unit})` : "";
+    $("quickValue").value = num(placement.quantity) ?? "";
+    updateQuickPreview();
+    $("quickModal").hidden = false;
+    setTimeout(() => { $("quickValue").focus(); $("quickValue").select?.(); }, 40);
+  }
+  async function submitQuick(event) {
+    event.preventDefault();
+    if (!currentOperator()) return toast("작업자명을 먼저 입력하세요.", "bad");
+    const pid = $("quickForm").dataset.id, placement = state.placements.find((p) => p.id === pid);
+    const record = state.records.find((r) => r.id === placement?.recordId);
+    const quantity = num($("quickValue").value);
+    if (!placement || !record) return;
+    if (quantity === null) { $("quickValue").focus(); return toast("수량을 입력하세요.", "bad"); }
+    if (quantity < 0) return toast("수량은 0 이상이어야 합니다.", "bad");
+    if (state.savingQuick) return;
+    state.savingQuick = true;
+    try {
+      await savePlacement(record, { rackCode: placement.rackCode, quantity, workStatus: placement.workStatus, note: placement.note });
+    } finally { state.savingQuick = false; }
+    $("quickModal").hidden = true;
+    toast(`${record.productName || placement.recordId} 수량을 ${qty(quantity)}(으)로 수정했습니다.`);
+  }
+
+  /* ---------------- 구글 시트 기준 전체 현황 ---------------- */
+  const SHEET_URL = "https://docs.google.com/spreadsheets/d/1VsQUWTB4oQ1WJa7J7jD3AoLjJJAKexD43YtdHFKr-24/edit";
+  const sheetUrl = () => cloud.sheetUrl || SHEET_URL;
+  let sheetData = null, sheetAt = 0;
+  const kst = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }); };
+
+  async function loadSheetOverview(force) {
+    $("sheetOpenLink").href = sheetUrl();
+    if (!cloud.url) { $("sheetNote").textContent = "구글 시트 주소가 설정되지 않았습니다. 설정 탭의 [연결 설정]에서 넣어 주세요."; return; }
+    if (!force && sheetData && Date.now() - sheetAt < 30000) return renderSheetOverview();
+    if (!navigator.onLine) { $("sheetNote").textContent = "오프라인입니다. 인터넷이 연결되면 새로고침하세요."; if (sheetData) renderSheetOverview(true); return; }
+    $("sheetNote").textContent = "구글 시트에서 불러오는 중…"; $("sheetRefresh").disabled = true;
+    try {
+      const res = await fetch(`${cloud.url}?action=overview&token=${encodeURIComponent(cloud.token || "")}`, { redirect: "follow" });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error === "token_mismatch" ? "토큰이 일치하지 않습니다." : (data.error || "응답 오류"));
+      if (!data.overview) throw new Error("시트 스크립트가 아직 전체 현황을 지원하지 않습니다. 관리자가 시트 스크립트를 갱신해야 합니다.");
+      sheetData = data; sheetAt = Date.now();
+      if (data.sheetUrl) { cloud.sheetUrl = data.sheetUrl; $("sheetOpenLink").href = sheetUrl(); if ($("sheetOpenLink2")) $("sheetOpenLink2").href = sheetUrl(); }
+      renderSheetOverview();
+    } catch (error) {
+      $("sheetNote").textContent = `불러오지 못했습니다: ${error.message}`;
+      if (sheetData) renderSheetOverview(true);
+    } finally { $("sheetRefresh").disabled = false; }
+  }
+
+  function renderSheetOverview(stale) {
+    const d = sheetData; if (!d) return;
+    const records = state.records;
+    const byReq = new Map(d.requests.map((r) => [String(r[0]), r]));
+    const counts = { 일치: 0, 부족: 0, 초과: 0, 기준없음: 0, 미처리: 0 };
+    const names = new Map();
+    for (const r of records) {
+      if (!names.has(r.requestNumber)) names.set(r.requestNumber, r.productName);
+      const hit = byReq.get(String(r.requestNumber));
+      if (!hit) counts.미처리++; else counts[hit[1] in counts ? hit[1] : "기준없음"]++;
+    }
+    const total = records.length, done = total - counts.미처리;
+    const pct = total ? Math.round(done / total * 1000) / 10 : 0;
+    $("sheetStamp").textContent = `${kst(d.generatedAt)} 기준`;
+    $("sheetNote").textContent = stale ? "최신 정보를 불러오지 못해 마지막으로 받은 내용을 보여 줍니다." : `시트의 모든 작업자 입력 ${d.totals.rows.toLocaleString()}건을 합친 현황입니다. 이 폰의 미전송 ${state.queue || 0}건은 포함되지 않습니다.`;
+    const rowsOf = (list, cols) => list.map((x) => `<tr>${cols.map((c) => `<td>${c(x)}</td>`).join("")}</tr>`).join("");
+    const issues = d.requests.filter((r) => r[1] === "부족" || r[1] === "초과").slice(0, 30);
+    $("sheetBody").innerHTML = `
+      <div class="progress"><div class="ring" style="--p:${Math.round(pct * 3.6)}deg"><strong>${Math.round(pct)}%</strong></div><div><small>시트 기준 배치 완료</small><p><b>${done.toLocaleString()}</b> / ${total.toLocaleString()}건 · ${pct}%</p></div></div>
+      <div class="sheet-bar"><i style="width:${pct}%"></i></div>
+      <div class="sheet-tiles">
+        <div><span>수량 일치</span><b>${counts.일치.toLocaleString()}</b></div>
+        <div class="warn"><span>수량 부족</span><b>${counts.부족.toLocaleString()}</b></div>
+        <div class="danger"><span>수량 초과</span><b>${counts.초과.toLocaleString()}</b></div>
+        <div><span>미처리</span><b>${counts.미처리.toLocaleString()}</b></div>
+      </div>
+      <p class="sheet-sub">작업자별</p>
+      <table class="sheet-table"><tr><th>작업자</th><th>배치(행)</th><th>수량 합</th><th>마지막</th></tr>${rowsOf(d.workers, [(x) => esc(x.name), (x) => x.rows.toLocaleString(), (x) => qty(x.qty), (x) => kst(x.last)])}</table>
+      <p class="sheet-sub">구역별</p>
+      <table class="sheet-table"><tr><th>구역</th><th>배치(행)</th><th>수량 합</th></tr>${rowsOf(d.zones, [(x) => esc(x.zone), (x) => x.rows.toLocaleString(), (x) => qty(x.qty)])}</table>
+      ${issues.length ? `<p class="sheet-sub">수량 부족·초과 (${issues.length}${d.requests.filter((r) => r[1] === "부족" || r[1] === "초과").length > issues.length ? "+" : ""}건)</p>
+      <table class="sheet-table"><tr><th>품목 · 의뢰번호</th><th>판정</th><th>집계/기준</th></tr>${rowsOf(issues, [(x) => `${esc(names.get(x[0]) || "")}<br><small>${esc(x[0])}</small>`, (x) => esc(x[1]), (x) => `${qty(x[2])} / ${qty(x[3])}`])}</table>` : ""}
+      ${d.dups.length ? `<p class="sheet-sub">중복 의심 (${d.dups.length}건)</p><table class="sheet-table"><tr><th>품목 · 의뢰번호</th><th>겹친 랙(작업자)</th></tr>${rowsOf(d.dups, [(x) => `${esc(x[1])}<br><small>${esc(x[0])}</small>`, (x) => esc(x[2])])}</table>` : ""}
+      <p class="sheet-sub">최근 입력</p>
+      <table class="sheet-table"><tr><th>시각</th><th>작업자</th><th>랙</th><th>수량</th><th>품목</th></tr>${rowsOf(d.recent.slice(0, 12), [(x) => kst(x[0]), (x) => esc(x[1]), (x) => esc(x[2]), (x) => qty(x[3]), (x) => esc(x[4])])}</table>`;
   }
 
   /* ---------------- 배치 상세 수정 ---------------- */
@@ -699,7 +811,10 @@
       }),
       ...extras.map((u) => `<div class="rack-item extra"><span><b>${esc(u.productName)}</b><small>제조 ${esc(u.lotNumber)} · 목록 외</small></span><span class="qty-badge">${qty(num(u.quantity))}<small>${esc(u.unit || "")}</small></span></div>`),
     ].join("") || '<p class="picker-hint">아직 이 랙에 담긴 검체가 없습니다. 제품 바코드를 스캔하세요.</p>';
-    $("rackItems").querySelectorAll(".rack-item[data-id]").forEach((b) => b.addEventListener("click", () => openDetail(b.dataset.id)));
+    $("rackItems").querySelectorAll(".rack-item[data-id]").forEach((b) => {
+      b.addEventListener("click", () => openDetail(b.dataset.id));
+      b.querySelector(".qty-badge")?.addEventListener("click", (e) => { e.stopPropagation(); openQuickEdit(b.dataset.id); });
+    });
   }
 
   function candidateRecords() {
@@ -848,7 +963,8 @@
 
   // 현황 탭 안의 세 화면(검체 목록 / 랙 현황 / 점검) 전환
   function showView(name) {
-    ["list", "racks", "issues"].forEach((v) => { const el = $(`${v}View`); if (el) el.hidden = v !== name; });
+    ["list", "racks", "issues", "sheet"].forEach((v) => { const el = $(`${v}View`); if (el) el.hidden = v !== name; });
+    if (name === "sheet") loadSheetOverview(false);
     document.querySelectorAll(".segment button").forEach((b) => b.classList.toggle("on", b.dataset.view === name));
   }
 
@@ -1587,6 +1703,14 @@
       handleScan(value);
     });
     on("switchCamBtn", "click", switchCamera);
+    on("quickForm", "submit", submitQuick);
+    on("quickValue", "input", updateQuickPreview);
+    $("quickForm").querySelectorAll("[data-quick]").forEach((b) => b.addEventListener("click", () => {
+      const next = Math.max(0, (num($("quickValue").value) || 0) + Number(b.dataset.quick));
+      $("quickValue").value = next; updateQuickPreview();
+    }));
+    on("sheetRefresh", "click", () => loadSheetOverview(true));
+    ["sheetOpenLink", "sheetOpenLink2"].forEach((id) => { if ($(id)) $(id).href = sheetUrl(); });
     on("torchBtn", "click", toggleTorch);
     on("zoomRange", "input", (e) => setZoom(e.target.value));
     on("videoWrap", "click", tapFocus);

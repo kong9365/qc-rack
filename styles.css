@@ -366,3 +366,93 @@ button.wide{width:100%;min-height:46px;margin-top:8px}
 .diag-list{margin:8px 0;display:grid;gap:4px;font-size:11px}
 .diag-list div{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fbfdfe;word-break:break-all}
 .diag-list b{color:var(--teal)}
+
+/* ===== 컴팩트 화면: 글씨와 여백을 줄여 스크롤 없이 한눈에 ===== */
+body{font-size:13px}
+.topbar{min-height:42px;padding:5px 10px}
+.topbar .logo{width:26px;height:26px;font-size:11px}
+.topbar h1{font-size:14px}
+.local-state{padding:5px 8px;font-size:9px}
+.tabs{top:42px;height:38px}
+.tabs button{height:38px;font-size:13px}
+.tab-panel{padding:8px}
+.rack-picker,.full{margin:0 0 8px;padding:10px}
+.scan-panel,.rack-contents{padding:10px;margin-bottom:8px}
+.heading{margin-bottom:8px}
+.heading h2{font-size:15px}
+.picker-row{padding:6px 0;gap:4px}
+.chip-grid{gap:5px}
+.chip{min-height:36px;padding:0 10px;font-size:13px}
+.chip.big{flex:1 0 22%;min-height:38px;font-size:15px}
+.chip.zone-chip{flex:1 0 22%;min-height:44px;padding:0 6px}
+.chip.zone-chip b{font-size:14px}
+.chip.zone-chip small{font-size:8px}
+#baseGrid .chip{flex:1 0 14%;min-height:36px;padding:0 4px}
+.chip.level,#levelGrid .chip{flex:1 0 22%;min-height:44px}
+.chip.level small{font-size:9px}
+.rack-direct{margin-top:6px}
+.rack-banner{padding:8px 12px;margin-bottom:6px}
+.rack-banner h2{font-size:22px}
+.rack-meta{margin:0 0 8px;font-size:10px;line-height:1.5}
+.scan-box{padding:9px}
+.scan-box .scan{min-height:46px;font-size:15px;margin-bottom:7px}
+.scan-input-row input{height:38px;font-size:13px}
+.scan-toggles{margin-top:6px}
+.result-card{margin-top:8px}
+.result-actions button{min-height:38px;font-size:12px}
+.rack-item{min-height:44px;padding:8px 10px}
+.rack-item b{font-size:13px}
+.rack-item small{font-size:10px}
+.status-summary{padding:10px;gap:8px;margin-bottom:8px}
+.metric-grid{gap:6px}
+.metric-grid .metric{padding:7px 9px}
+.metric-grid .metric b{font-size:17px}
+.segment{margin-bottom:8px;padding:3px}
+.segment button{min-height:34px;font-size:12px}
+.view{padding:10px;margin-bottom:8px}
+.filters{gap:6px;margin-bottom:8px}
+.filter-row select,.filters input{height:36px;font-size:12px}
+.card-list{gap:6px}
+.data-card{padding:9px 11px}
+.dc-top b{font-size:13px}
+.dc-sub{font-size:10px;margin-top:3px}
+.dc-nums{gap:9px;margin-top:6px;font-size:10px}
+.dc-nums b{font-size:12px}
+.rack-grid{gap:6px}
+.rack-card{padding:9px}
+.rack-card h3{font-size:13px}
+.issue-cards div{padding:8px}
+.issue-cards b{font-size:16px}
+.setting-card,.cloud-card,.more{padding:11px;margin-bottom:8px}
+button.wide{min-height:40px;margin-top:6px}
+.modal{max-height:94vh;padding:13px 14px calc(13px + env(safe-area-inset-bottom))}
+.modal-head{margin-bottom:8px}
+.modal-head h2{font-size:15px}
+.qty-meta{margin:0 0 8px;font-size:10px}
+.qty-facts div{padding:7px 9px}
+.qty-facts b{font-size:14px}
+.qty-input input{height:50px;font-size:23px}
+.qty-input button{flex:0 0 50px;height:50px}
+.detail-actions button{min-height:42px}
+.video-wrap video{min-height:200px;max-height:40vh}
+
+/* ===== 전체 현황 · 바로가기 · 수량 탭 수정 ===== */
+.linkbtn{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800}
+.sheet-actions{display:flex;gap:8px;margin:8px 0}
+.sheet-actions .primary,.sheet-actions .linkbtn{flex:1;min-height:38px}
+.cloud-actions .linkbtn{width:100%}
+.sheet-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:8px 0}
+.sheet-tiles div{padding:7px 4px;border:1px solid var(--line);border-radius:9px;text-align:center;background:#fbfdfe}
+.sheet-tiles span{display:block;font-size:9px;color:var(--muted);font-weight:800}
+.sheet-tiles b{font-size:16px;color:var(--navy2)}
+.sheet-tiles .warn b{color:var(--amber)}.sheet-tiles .danger b{color:var(--red)}
+.sheet-bar{height:10px;margin:6px 0 2px;border-radius:6px;background:#dfeaed;overflow:hidden}
+.sheet-bar i{display:block;height:100%;background:var(--teal2)}
+.sheet-table{width:100%;border-collapse:collapse;font-size:11px;margin:4px 0 10px}
+.sheet-table th{font-size:9px;text-align:left;color:#617582;padding:4px 5px;background:#edf3f6}
+.sheet-table td{padding:5px;border-bottom:1px solid #e5edf1;white-space:normal;word-break:break-all}
+.sheet-sub{margin:10px 0 2px;font-size:12px;font-weight:800;color:var(--navy2)}
+button.qty-edit,.rack-item .qty-badge{cursor:pointer}
+button.qty-edit{display:inline;min-height:0;padding:1px 7px;border:1px dashed #75bdb5;border-radius:7px;color:var(--teal);background:#eefaf8;font-size:inherit;font-weight:900}
+.rack-item .qty-badge{border:1px dashed #75bdb5;border-radius:8px;padding:3px 8px;background:#eefaf8}
+@media(max-width:650px){.qty-facts{grid-template-columns:1fr 1fr}.qty-facts div:nth-child(odd){border-right:1px solid var(--line)}.qty-facts div:nth-last-child(2){border-bottom:0}.qty-facts b{font-size:13px}}

@@ -108,6 +108,7 @@
         <button class="on" data-view="list">검체 목록</button>
         <button data-view="racks">랙 현황</button>
         <button data-view="issues">점검</button>
+        <button data-view="sheet">전체</button>
       </nav>
 
       <article id="listView" class="panel view">
@@ -125,6 +126,13 @@
       <article id="racksView" class="panel view" hidden>
         <div class="section-title"><div><small>RACK</small><h2>랙 배치 현황</h2></div><b id="rackSummary"></b></div>
         <div id="rackGrid" class="rack-grid"></div>
+      </article>
+
+      <article id="sheetView" class="panel view" hidden>
+        <div class="section-title"><div><small>GOOGLE SHEETS</small><h2>전체 작업 현황</h2></div><b id="sheetStamp"></b></div>
+        <p class="more-note" id="sheetNote">구글 시트에 올라온 모든 작업자의 입력을 합쳐서 보여 줍니다.</p>
+        <div class="sheet-actions"><button class="primary" id="sheetRefresh">새로고침</button><a class="ghost dark linkbtn" id="sheetOpenLink" target="_blank" rel="noopener">구글 시트 열기 ↗</a></div>
+        <div id="sheetBody"></div>
       </article>
 
       <article id="issuesView" class="panel view" hidden>
@@ -152,6 +160,7 @@
         <div class="cloud-stats"><div><span>대기 중</span><b id="queueCount">0</b></div><div><span>업로드 완료</span><b id="sentCount">0</b></div><div><span>마지막 전송</span><b id="lastSync">—</b></div></div>
         <div class="cloud-actions">
           <button class="primary" id="syncNowBtn">지금 업로드</button>
+          <a class="ghost dark linkbtn" id="sheetOpenLink2" target="_blank" rel="noopener">구글 시트 열기 ↗</a>
           <button class="ghost dark" id="cloudSetupBtn">연결 설정</button>
           <button class="ghost dark" id="requeueBtn">전체 다시 올리기</button>
         </div>
@@ -223,6 +232,17 @@
     <input type="file" id="photoInput" accept="image/*" hidden>
     <button type="button" class="save" id="finishScanBtn">✓ 완료 · 카메라 끄기</button>
   </div></div>
+
+  <!-- 수량 빠른 수정 -->
+  <div id="quickModal" class="modal-backdrop" hidden><form id="quickForm" class="modal qty-modal">
+    <div class="modal-head"><div><small>수량 수정</small><h2 id="quickName">—</h2></div><button type="button" data-close="quick">×</button></div>
+    <p class="qty-meta" id="quickMeta"></p>
+    <label class="qty-input-label">수량 <span id="quickUnit"></span>
+      <div class="qty-input"><button type="button" data-quick="-1">−</button><input id="quickValue" inputmode="decimal" autocomplete="off"><button type="button" data-quick="1">+</button></div>
+    </label>
+    <p class="qty-preview" id="quickPreview"></p>
+    <div class="detail-actions"><button type="button" class="ghost dark" data-close="quick">취소</button><button class="save">저장</button></div>
+  </form></div>
 
   <!-- 수량 확인 -->
   <div id="qtyModal" class="modal-backdrop" hidden><form id="qtyForm" class="modal qty-modal">
