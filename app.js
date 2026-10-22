@@ -642,8 +642,13 @@
     const byReq = new Map(d.requests.map((r) => [String(r[0]), r]));
     const counts = { 일치: 0, 부족: 0, 초과: 0, 기준없음: 0, 미처리: 0 };
     const names = new Map();
+    const lots = new Map();
     for (const r of records) {
       if (!names.has(r.requestNumber)) names.set(r.requestNumber, r.productName);
+      if (r.lotNumber) {
+        const set = lots.get(r.requestNumber) || new Set();
+        set.add(r.lotNumber); lots.set(r.requestNumber, set);
+      }
       const hit = byReq.get(String(r.requestNumber));
       if (!hit) counts.미처리++; else counts[hit[1] in counts ? hit[1] : "기준없음"]++;
     }
@@ -667,7 +672,7 @@
       <p class="sheet-sub">구역별</p>
       <table class="sheet-table"><tr><th>구역</th><th>배치(행)</th><th>수량 합</th></tr>${rowsOf(d.zones, [(x) => esc(x.zone), (x) => x.rows.toLocaleString(), (x) => qty(x.qty)])}</table>
       ${issues.length ? `<p class="sheet-sub">수량 부족·초과 (${issues.length}${d.requests.filter((r) => r[1] === "부족" || r[1] === "초과").length > issues.length ? "+" : ""}건)</p>
-      <table class="sheet-table"><tr><th>품목 · 의뢰번호</th><th>판정</th><th>집계/기준</th></tr>${rowsOf(issues, [(x) => `${esc(names.get(x[0]) || "")}<br><small>${esc(x[0])}</small>`, (x) => esc(x[1]), (x) => `${qty(x[2])} / ${qty(x[3])}`])}</table>` : ""}
+      <table class="sheet-table"><tr><th>품목 · 의뢰번호 · 로트</th><th>판정</th><th>집계/기준</th></tr>${rowsOf(issues, [(x) => `${esc(names.get(x[0]) || "")}<br><small>${esc(x[0])}${lots.has(x[0]) ? ` · 로트 ${esc([...lots.get(x[0])].join(", "))}` : ""}</small>`, (x) => esc(x[1]), (x) => `${qty(x[2])} / ${qty(x[3])}`])}</table>` : ""}
       ${d.dups.length ? `<p class="sheet-sub">중복 의심 (${d.dups.length}건)</p><table class="sheet-table"><tr><th>품목 · 의뢰번호</th><th>겹친 랙(작업자)</th></tr>${rowsOf(d.dups, [(x) => `${esc(x[1])}<br><small>${esc(x[0])}</small>`, (x) => esc(x[2])])}</table>` : ""}
       <p class="sheet-sub">최근 입력</p>
       <table class="sheet-table"><tr><th>시각</th><th>작업자</th><th>랙</th><th>수량</th><th>품목</th></tr>${rowsOf(d.recent.slice(0, 12), [(x) => kst(x[0]), (x) => esc(x[1]), (x) => esc(x[2]), (x) => qty(x[3]), (x) => esc(x[4])])}</table>`;
