@@ -459,7 +459,8 @@
     });
     updateQtyPreview();
     $("qtyModal").hidden = false;
-    setTimeout(() => { $("qtyValue").focus(); $("qtyValue").select?.(); }, 40);
+    // 스캔 직후에는 숫자패드를 띄우지 않는다(마스터 수량이 이미 입력되어 있음). 수량 칸을 누르면 그때 숫자패드가 나온다.
+    document.activeElement?.blur?.();
   }
 
   function updateQtyPreview() {
@@ -1703,6 +1704,8 @@
       handleScan(value);
     });
     on("switchCamBtn", "click", switchCamera);
+    // 수량 칸을 누르면 숫자패드가 열리고, 미리 입력된 값은 전체 선택되어 바로 덮어쓸 수 있다.
+    on("qtyValue", "focus", (e) => setTimeout(() => { try { e.target.select(); } catch { /* 무시 */ } }, 0));
     on("quickForm", "submit", submitQuick);
     on("quickValue", "input", updateQuickPreview);
     $("quickForm").querySelectorAll("[data-quick]").forEach((b) => b.addEventListener("click", () => {
