@@ -827,12 +827,11 @@
     const pq = normalize($("productQuery").value), lq = normalize($("lotQuery").value);
     if (!pq && !lq) return [];
     return state.records
-      .filter((r) => (!pq || normalize(`${r.productName} ${r.itemCode} ${r.requestNumber} ${r.id}`).includes(pq)) && (!lq || normalize(r.lotNumber).includes(lq)))
-      .slice(0, 20);
+      .filter((r) => (!pq || normalize(`${r.productName} ${r.itemCode} ${r.requestNumber} ${r.id}`).includes(pq)) && (!lq || normalize(r.lotNumber).includes(lq)));
   }
   function renderCandidates() {
     const rows = candidateRecords(), index = placementIndex();
-    $("candidateCount").textContent = rows.length ? `${rows.length}건 표시` : "검색어를 입력하세요";
+    $("candidateCount").textContent = rows.length ? `검색 결과 ${rows.length.toLocaleString()}건` : "검색어를 입력하세요";
     $("candidates").innerHTML = rows.map((r) => {
       const list = index.get(r.id) || [];
       const status = recordStatus(r, list);
@@ -1762,8 +1761,10 @@
       } else if (e.key.length === 1) state.wedge.buffer += e.key;
     });
 
-    on("productQuery", "input", renderCandidates);
-    on("lotQuery", "input", renderCandidates);
+    let candidateTimer = 0;
+    const renderCandidatesSoon = () => { clearTimeout(candidateTimer); candidateTimer = setTimeout(renderCandidates, 150); };
+    on("productQuery", "input", renderCandidatesSoon);
+    on("lotQuery", "input", renderCandidatesSoon);
     on("unlistedBtn", "click", (e) => { e.preventDefault(); openUnlisted(); });
     on("unlistedForm", "submit", saveUnlisted);
 
